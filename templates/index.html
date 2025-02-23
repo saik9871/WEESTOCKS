@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WeeStocks - Paper Trading Demo</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .balance {
+            font-size: 24px;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        .card {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stock-price {
+            font-size: 24px;
+            color: #27ae60;
+            margin: 10px 0;
+        }
+        .trade-form {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        input[type="number"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            width: 100px;
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .buy {
+            background-color: #27ae60;
+            color: white;
+        }
+        .sell {
+            background-color: #e74c3c;
+            color: white;
+        }
+        .portfolio {
+            margin-top: 20px;
+        }
+        .position {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>WeeStocks Trading</h1>
+            <div class="balance">Cash Balance: ${{ "%.2f"|format(user.cash) }}</div>
+        </div>
+
+        <div class="grid">
+            {% for stock in stocks %}
+            <div class="card">
+                <h2>{{ stock.name }} ({{ stock.symbol }})</h2>
+                <div class="stock-price">${{ "%.2f"|format(stock.price) }}</div>
+                <div>Available Shares: {{ stock.total_shares - stock.shares_held }}</div>
+                <form class="trade-form" action="{{ url_for('trade') }}" method="POST">
+                    <input type="hidden" name="symbol" value="{{ stock.symbol }}">
+                    <input type="number" name="quantity" min="1" placeholder="Quantity" required>
+                    <button type="submit" name="action" value="buy" class="buy">Buy</button>
+                    <button type="submit" name="action" value="sell" class="sell">Sell</button>
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="card portfolio">
+            <h2>Your Portfolio</h2>
+            {% for symbol, data in portfolio.items() %}
+            <div class="position">
+                <span>{{ symbol }}</span>
+                <span>Shares: {{ data.shares }}</span>
+                <span>Value: ${{ "%.2f"|format(data.value) }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</body>
+</html> 

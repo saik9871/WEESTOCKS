@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WEENSTOCKS - Admin Panel</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --black: #000000;
+            --dark-gray: #121212;
+            --gray: #333333;
+            --light-gray: #666666;
+            --text: #ffffff;
+            --accent: #888888;
+            --green: #00cc00;
+            --red: #cc0000;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Roboto', sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            background: var(--black);
+            color: var(--text);
+        }
+
+        .admin-container {
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            background: var(--dark-gray);
+            padding: 2rem;
+            border-right: 1px solid var(--gray);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .logo {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 1rem;
+        }
+
+        .admin-badge {
+            background: var(--gray);
+            color: var(--text);
+            padding: 0.5rem;
+            border-radius: 5px;
+            text-align: center;
+            margin-bottom: 3rem;
+            font-size: 0.9rem;
+        }
+
+        .back-btn {
+            background: var(--gray);
+            color: var(--text);
+            padding: 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            margin-bottom: 2rem;
+            text-decoration: none;
+            text-align: center;
+            border: none;
+        }
+
+        .back-btn:hover {
+            background: var(--light-gray);
+        }
+
+        .main-content {
+            padding: 2rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 2rem;
+        }
+
+        .section {
+            background: var(--dark-gray);
+            border-radius: 5px;
+            padding: 2rem;
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .section-title i {
+            color: var(--accent);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--accent);
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.8rem;
+            background: var(--black);
+            border: 1px solid var(--gray);
+            border-radius: 5px;
+            color: var(--text);
+            margin-bottom: 1rem;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--light-gray);
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 1rem;
+            background: var(--gray);
+            color: var(--text);
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .submit-btn:hover {
+            background: var(--light-gray);
+        }
+
+        .user-list {
+            margin-top: 2rem;
+        }
+
+        .user-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: var(--black);
+            border-radius: 5px;
+            margin-bottom: 1rem;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .permission-toggle {
+            position: relative;
+            width: 50px;
+            height: 26px;
+            border-radius: 13px;
+            background: var(--gray);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .permission-toggle.active {
+            background: var(--green);
+        }
+
+        .permission-toggle::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 20px;
+            height: 20px;
+            background: var(--text);
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+
+        .permission-toggle.active::after {
+            left: 27px;
+        }
+
+        .stock-list {
+            margin-top: 2rem;
+        }
+
+        .stock-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: var(--black);
+            border-radius: 5px;
+            margin-bottom: 1rem;
+        }
+
+        .stock-info span {
+            color: var(--accent);
+            margin-left: 1rem;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 0.8rem;
+            background: var(--black);
+            border: 1px solid var(--gray);
+            border-radius: 5px;
+            color: var(--text);
+            margin-bottom: 1rem;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 1rem;
+            border-radius: 5px;
+            background: var(--gray);
+            color: var(--text);
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .admin-container {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                height: auto;
+                flex-direction: row;
+                align-items: center;
+                justify-content: space-between;
+                padding: 1rem;
+                z-index: 100;
+            }
+
+            .logo {
+                font-size: 1.2rem;
+                margin: 0;
+            }
+
+            .admin-badge {
+                margin: 0;
+            }
+
+            .back-btn {
+                margin: 0;
+            }
+
+            .main-content {
+                padding-bottom: 100px;
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .delete-btn {
+            background: transparent;
+            border: 1px solid var(--red);
+            color: var(--red);
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .delete-btn:hover {
+            background: var(--red);
+            color: var(--text);
+        }
+
+        .delete-btn i {
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <aside class="sidebar">
+            <h1 class="logo">WEENSTOCKS</h1>
+            <div class="admin-badge">Admin Panel</div>
+            <a href="{{ url_for('dashboard') }}" class="back-btn">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </aside>
+
+        <main class="main-content">
+            <div class="section">
+                <h2 class="section-title">
+                    <i class="fas fa-plus-circle"></i>
+                    Add New Stock
+                </h2>
+                <form action="{{ url_for('add_stock') }}" method="POST">
+                    <div class="form-group">
+                        <label for="name">Stock Name</label>
+                        <input type="text" id="name" name="name" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="symbol">Stock Symbol</label>
+                        <input type="text" id="symbol" name="symbol" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="price">Initial Price</label>
+                        <input type="number" id="price" name="price" step="0.01" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="description">Description (Optional)</label>
+                        <textarea id="description" name="description" class="form-input" rows="3"></textarea>
+                    </div>
+                    <button type="submit" class="submit-btn">Add Stock</button>
+                </form>
+
+                <div class="stocks-section">
+                    <h2>Current Stocks</h2>
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Name</th>
+                                <th>Price</th>
+                                <th>Total Shares</th>
+                                <th>Shares Held</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for stock in stocks %}
+                            <tr>
+                                <td>{{ stock.symbol }}</td>
+                                <td>{{ stock.name }}</td>
+                                <td>${{ "%.2f"|format(stock.price) }}</td>
+                                <td>{{ stock.total_shares }}</td>
+                                <td>{{ stock.shares_held }}</td>
+                                <td>
+                                    <form action="{{ url_for('delete_stock', stock_id=stock.id) }}" method="POST" style="display: inline;">
+                                        <button type="submit" class="delete-btn" 
+                                                onclick="return confirm('Are you sure you want to delete {{ stock.symbol }}? This will also remove all related positions and history.')">
+                                            <i class="fas fa-trash"></i> Delete
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">
+                    <i class="fas fa-users-cog"></i>
+                    User Permissions
+                </h2>
+                <input type="text" class="search-input" placeholder="Search users..." onkeyup="filterUsers(this.value)">
+                <div class="user-list">
+                    {% for user in users %}
+                    <div class="user-item" data-username="{{ user.username.lower() }}">
+                        <div class="user-info">
+                            <i class="fas fa-user"></i>
+                            {{ user.username }}
+                        </div>
+                        <div class="permission-toggle {% if user.can_add_stocks %}active{% endif %}"
+                             onclick="togglePermission(this, {{ user.id }})">
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        function filterUsers(query) {
+            query = query.toLowerCase();
+            document.querySelectorAll('.user-item').forEach(item => {
+                const username = item.dataset.username;
+                item.style.display = username.includes(query) ? 'flex' : 'none';
+            });
+        }
+
+        function togglePermission(element, userId) {
+            fetch(`/admin/toggle_permission/${userId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        element.classList.toggle('active');
+                        showNotification(data.message);
+                    }
+                })
+                .catch(error => {
+                    showNotification('Error updating permissions', true);
+                });
+        }
+
+        function showNotification(message, isError = false) {
+            const notification = document.createElement('div');
+            notification.className = `notification ${isError ? 'error' : 'success'}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+    </script>
+</body>
+</html> 

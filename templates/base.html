@@ -1,0 +1,14 @@
+<div class="nav-links">
+    {% if 'user_id' in session %}
+        <a href="{{ url_for('dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('portfolio') }}">Portfolio</a>
+        <a href="{{ url_for('leaderboard') }}">Leaderboard</a>
+        {% if user and user.is_admin %}
+            <a href="{{ url_for('admin_panel') }}">Admin Panel</a>
+        {% endif %}
+        <a href="{{ url_for('logout') }}">Logout</a>
+    {% else %}
+        <a href="{{ url_for('login') }}">Login</a>
+        <a href="{{ url_for('signup') }}">Sign Up</a>
+    {% endif %}
+</div> 

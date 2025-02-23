@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WEENSTOCKS - Portfolio</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --black: #000000;
+            --dark-gray: #121212;
+            --gray: #333333;
+            --light-gray: #666666;
+            --text: #ffffff;
+            --accent: #888888;
+            --green: #00cc00;
+            --red: #cc0000;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Roboto', sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            background: var(--black);
+            color: var(--text);
+        }
+
+        .portfolio-container {
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            background: var(--dark-gray);
+            padding: 2rem;
+            border-right: 1px solid var(--gray);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .logo {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 3rem;
+        }
+
+        .back-btn {
+            background: var(--gray);
+            color: var(--text);
+            padding: 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            margin-bottom: 2rem;
+            text-decoration: none;
+            text-align: center;
+            border: none;
+        }
+
+        .back-btn:hover {
+            background: var(--light-gray);
+        }
+
+        .wallet {
+            margin-top: auto;
+            padding: 1.5rem;
+            background: var(--gray);
+            border-radius: 5px;
+        }
+
+        .wallet-label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text);
+            margin-bottom: 0.5rem;
+            opacity: 0.8;
+        }
+
+        .wallet-balance {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .main-content {
+            padding: 2rem;
+        }
+
+        .portfolio-summary {
+            background: var(--dark-gray);
+            border-radius: 5px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .summary-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1.5rem;
+        }
+
+        .summary-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .summary-title {
+            font-size: 1.5rem;
+            color: var(--text);
+        }
+
+        .username {
+            color: var(--accent);
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .total-value {
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .holdings-grid {
+            display: grid;
+            gap: 1rem;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        }
+
+        .holding-card {
+            background: var(--dark-gray);
+            border-radius: 5px;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .holding-card:hover {
+            background: var(--gray);
+        }
+
+        .holding-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .holding-name {
+            font-size: 1.2rem;
+            color: var(--text);
+        }
+
+        .holding-symbol {
+            color: var(--accent);
+        }
+
+        .holding-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .detail-item {
+            background: var(--black);
+            padding: 1rem;
+            border-radius: 5px;
+        }
+
+        .detail-label {
+            font-size: 0.9rem;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+        }
+
+        .detail-value {
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+
+        .profit-loss {
+            margin-top: 1rem;
+            padding: 0.5rem;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .profit-loss.positive {
+            background: var(--black);
+            color: var(--green);
+        }
+
+        .profit-loss.negative {
+            background: var(--black);
+            color: var(--red);
+        }
+
+        @media (max-width: 768px) {
+            .portfolio-container {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                height: auto;
+                flex-direction: row;
+                align-items: center;
+                justify-content: space-between;
+                padding: 1rem;
+                z-index: 100;
+            }
+
+            .logo {
+                font-size: 1.2rem;
+                margin: 0;
+            }
+
+            .back-btn {
+                margin: 0;
+                padding: 0.5rem 1rem;
+            }
+
+            .wallet {
+                padding: 0.5rem 1rem;
+            }
+
+            .main-content {
+                padding-bottom: 100px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .holdings-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .holding-details {
+                grid-template-columns: 1fr;
+            }
+
+            .summary-header {
+                flex-direction: column;
+                text-align: center;
+                gap: 1rem;
+            }
+
+            .summary-info {
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="portfolio-container">
+        <aside class="sidebar">
+            <h1 class="logo">WEENSTOCKS</h1>
+            <a href="{{ url_for('dashboard') }}" class="back-btn">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+            <div class="wallet">
+                <div class="wallet-label">
+                    <i class="fas fa-wallet"></i>
+                    <span>Balance</span>
+                </div>
+                <div class="wallet-balance">${{ "%.2f"|format(user.cash) }}</div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div class="portfolio-summary">
+                <div class="summary-header">
+                    <div class="summary-info">
+                        <h2 class="summary-title">Portfolio Summary</h2>
+                        <div class="username">
+                            <i class="fas fa-user"></i>
+                            {{ user.username }}
+                        </div>
+                    </div>
+                    <div class="total-value">
+                        ${{ "%.2f"|format(total_value) }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="holdings-grid">
+                {% for symbol, data in portfolio.items() %}
+                <div class="holding-card">
+                    <div class="holding-header">
+                        <h3 class="holding-name">{{ data.name }}</h3>
+                        <span class="holding-symbol">{{ symbol }}</span>
+                    </div>
+                    
+                    <div class="holding-details">
+                        <div class="detail-item">
+                            <div class="detail-label">Shares Owned</div>
+                            <div class="detail-value">{{ data.shares }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Current Price</div>
+                            <div class="detail-value">${{ "%.2f"|format(data.price) }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Market Value</div>
+                            <div class="detail-value">${{ "%.2f"|format(data.value) }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Avg. Cost</div>
+                            <div class="detail-value">${{ "%.2f"|format(data.avg_cost) }}</div>
+                        </div>
+                    </div>
+
+                    <div class="profit-loss {% if data.profit > 0 %}positive{% else %}negative{% endif %}">
+                        {% if data.profit > 0 %}
+                            +${{ "%.2f"|format(data.profit) }} ({{ "%.1f"|format(data.profit_percentage) }}%)
+                        {% else %}
+                            -${{ "%.2f"|format(data.profit|abs) }} ({{ "%.1f"|format(data.profit_percentage|abs) }}%)
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </main>
+    </div>
+</body>
+</html> 

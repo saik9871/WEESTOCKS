@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WEENSTOCKS - Paper Trading Simulator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --black: #000000;
+            --dark-gray: #121212;
+            --gray: #333333;
+            --light-gray: #666666;
+            --text: #ffffff;
+            --accent: #888888;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Roboto', sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            background: var(--black);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        .nav {
+            position: fixed;
+            top: 0;
+            right: 0;
+            padding: 2rem;
+            display: flex;
+            gap: 1rem;
+            z-index: 100;
+        }
+
+        .nav-button {
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .login-btn {
+            background: transparent;
+            border: 2px solid var(--accent);
+            color: var(--text);
+        }
+
+        .login-btn:hover {
+            background: var(--gray);
+        }
+
+        .signup-btn {
+            background: var(--gray);
+            color: var(--text);
+        }
+
+        .signup-btn:hover {
+            background: var(--light-gray);
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .logo {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 4.5rem;
+            font-weight: 700;
+            color: var(--text);
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.8;
+            }
+        }
+
+        .footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--light-gray);
+            font-size: 0.9rem;
+            background: linear-gradient(0deg, var(--dark-gray) 0%, transparent 100%);
+        }
+
+        .developer {
+            color: var(--text);
+            font-weight: 300;
+            letter-spacing: 2px;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .logo {
+                font-size: 3rem;
+            }
+
+            .nav {
+                padding: 1rem;
+            }
+
+            .nav-button {
+                padding: 0.6rem 1.2rem;
+                font-size: 0.9rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .logo {
+                font-size: 2.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <a href="{{ url_for('login') }}" class="nav-button login-btn">Login</a>
+        <a href="{{ url_for('signup') }}" class="nav-button signup-btn">Sign Up</a>
+    </nav>
+
+    <main class="main-content">
+        <h1 class="logo">WEENSTOCKS</h1>
+    </main>
+
+    <footer class="footer">
+        <p>Developed by <span class="developer">VRSK</span></p>
+    </footer>
+</body>
+</html> 

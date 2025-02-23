@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WEENSTOCKS - Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --black: #000000;
+            --dark-gray: #121212;
+            --gray: #333333;
+            --light-gray: #666666;
+            --text: #ffffff;
+            --accent: #888888;
+            --green: #00cc00;
+            --red: #cc0000;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Roboto', sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            background: var(--black);
+            color: var(--text);
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            background: var(--dark-gray);
+            padding: 2rem;
+            border-right: 1px solid var(--gray);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .logo {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 3rem;
+        }
+
+        .portfolio-btn {
+            background: var(--gray);
+            color: var(--text);
+            padding: 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            margin-bottom: 2rem;
+            border: none;
+            text-decoration: none;
+            text-align: center;
+        }
+
+        .portfolio-btn:hover {
+            background: var(--light-gray);
+        }
+
+        .wallet {
+            margin-top: auto;
+            padding: 1.5rem;
+            background: var(--gray);
+            border-radius: 5px;
+        }
+
+        .wallet-label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text);
+            margin-bottom: 0.5rem;
+            opacity: 0.8;
+        }
+
+        .wallet-balance {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .logout-btn {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: transparent;
+            border: 1px solid var(--red);
+            color: var(--red);
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .logout-btn:hover {
+            background: var(--red);
+            color: var(--text);
+        }
+
+        .main-content {
+            padding: 2rem;
+        }
+
+        .stocks-grid {
+            display: grid;
+            gap: 1rem;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        }
+
+        .stock-card {
+            background: var(--dark-gray);
+            border-radius: 5px;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .stock-card:hover {
+            background: var(--gray);
+        }
+
+        .stock-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .stock-name {
+            font-size: 1.2rem;
+            color: var(--text);
+        }
+
+        .stock-symbol {
+            color: var(--accent);
+        }
+
+        .stock-price {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .stock-change.positive {
+            color: var(--green);
+        }
+
+        .stock-change.negative {
+            color: var(--red);
+        }
+
+        .trade-form {
+            margin-top: 1rem;
+        }
+
+        .trade-input {
+            width: 100%;
+            padding: 0.8rem;
+            background: var(--black);
+            border: 1px solid var(--gray);
+            border-radius: 5px;
+            color: var(--text);
+            margin-bottom: 1rem;
+        }
+
+        .trade-buttons {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .trade-btn {
+            flex: 1;
+            padding: 0.8rem;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .buy-btn {
+            background: var(--gray);
+            color: var(--text);
+        }
+
+        .buy-btn:hover {
+            background: var(--light-gray);
+        }
+
+        .sell-btn {
+            background: transparent;
+            border: 1px solid var(--gray);
+            color: var(--text);
+        }
+
+        .sell-btn:hover {
+            background: var(--gray);
+        }
+
+        .flash {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 1rem;
+            border-radius: 5px;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .flash.error {
+            background: var(--red);
+            color: var(--text);
+        }
+
+        .flash.success {
+            background: var(--green);
+            color: var(--text);
+        }
+
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                height: auto;
+                flex-direction: row;
+                align-items: center;
+                justify-content: space-between;
+                padding: 1rem;
+                z-index: 100;
+            }
+
+            .logo {
+                font-size: 1.2rem;
+                margin: 0;
+            }
+
+            .portfolio-btn {
+                margin: 0;
+                padding: 0.5rem 1rem;
+            }
+
+            .wallet {
+                padding: 0.5rem 1rem;
+            }
+
+            .main-content {
+                padding-bottom: 100px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .stocks-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .trade-buttons {
+                flex-direction: column;
+            }
+        }
+
+        .stocks-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 2rem;
+        }
+
+        .stocks-table th {
+            text-align: left;
+            padding: 1rem;
+            color: var(--accent);
+            font-weight: normal;
+            border-bottom: 1px solid var(--gray);
+        }
+
+        .stocks-table td {
+            padding: 1rem;
+            border-bottom: 1px solid var(--gray);
+        }
+
+        .positive-change {
+            color: var(--green);
+        }
+
+        .negative-change {
+            color: var(--red);
+        }
+
+        .holdings-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .summary-card {
+            background: var(--dark-gray);
+            padding: 1.5rem;
+            border-radius: 5px;
+        }
+
+        .summary-label {
+            color: var(--accent);
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .summary-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .summary-change {
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+
+        /* Leaderboard Toggle Button */
+        .leaderboard-toggle {
+            position: fixed;
+            right: 20px;
+            top: 80px;
+            background: var(--dark-gray);
+            border: 1px solid var(--gray);
+            color: var(--text);
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+            z-index: 998;
+        }
+
+        .leaderboard-toggle:hover {
+            background: var(--gray);
+            transform: translateX(-5px);
+        }
+
+        .trophy-icon {
+            font-size: 1.2em;
+            color: gold;
+        }
+
+        /* Leaderboard Window */
+        .leaderboard-window {
+            position: fixed;
+            right: 20px;
+            top: 130px;
+            width: 300px;
+            background: var(--dark-gray);
+            border: 1px solid var(--gray);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+            z-index: 999;
+        }
+
+        .leaderboard-window.hidden {
+            transform: translateX(120%);
+            opacity: 0;
+        }
+
+        .leaderboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            border-bottom: 1px solid var(--gray);
+            cursor: move;
+        }
+
+        .leaderboard-header h3 {
+            color: var(--text);
+            margin: 0;
+            font-size: 1.1em;
+        }
+
+        .leaderboard-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .leaderboard-controls button {
+            background: none;
+            border: none;
+            color: var(--light-gray);
+            cursor: pointer;
+            padding: 2px 6px;
+            transition: color 0.2s ease;
+        }
+
+        .leaderboard-controls button:hover {
+            color: var(--text);
+        }
+
+        .leaderboard-content {
+            padding: 15px;
+        }
+
+        .leaderboard-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .leaderboard-item {
+            display: grid;
+            grid-template-columns: 40px 1fr auto;
+            align-items: center;
+            padding: 8px;
+            background: var(--black);
+            border-radius: 4px;
+            transition: transform 0.2s ease;
+        }
+
+        .leaderboard-item:hover {
+            transform: translateX(5px);
+        }
+
+        .leaderboard-item.current-user {
+            background: linear-gradient(45deg, var(--dark-gray), var(--black));
+            border: 1px solid var(--accent);
+        }
+
+        .rank {
+            color: var(--accent);
+            font-weight: bold;
+        }
+
+        .username {
+            color: var(--text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .value {
+            color: var(--accent);
+            font-family: monospace;
+        }
+
+        .view-full {
+            display: block;
+            text-align: center;
+            color: var(--text);
+            text-decoration: none;
+            margin-top: 15px;
+            padding: 8px;
+            background: var(--gray);
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .view-full:hover {
+            background: var(--light-gray);
+            transform: translateY(-2px);
+        }
+
+        @media (max-width: 768px) {
+            .leaderboard-window {
+                width: 280px;
+                right: 10px;
+            }
+            
+            .leaderboard-toggle {
+                right: 10px;
+            }
+        }
+
+        /* Enhanced Leaderboard Window Styles */
+        .leaderboard-window {
+            width: 350px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .current-user-rank {
+            background: var(--dark-gray);
+            padding: 1rem;
+            border-bottom: 1px solid var(--gray);
+        }
+
+        .rank-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .rank-label {
+            color: var(--accent);
+            font-size: 0.9rem;
+        }
+
+        .rank-value {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .rank-number {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--text);
+        }
+
+        .rank-details {
+            display: flex;
+            flex-direction: column;
+            font-size: 0.9rem;
+        }
+
+        .rank-change {
+            font-size: 0.8rem;
+        }
+
+        .leaderboard-search {
+            padding: 1rem;
+            position: relative;
+            border-bottom: 1px solid var(--gray);
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 0.75rem;
+            padding-left: 2.5rem;
+            background: var(--black);
+            border: 1px solid var(--gray);
+            border-radius: 4px;
+            color: var(--text);
+            font-size: 0.9rem;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 1.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--accent);
+        }
+
+        .leaderboard-content {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 0.5rem;
+        }
+
+        .leaderboard-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .leaderboard-item {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem;
+            background: var(--black);
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .leaderboard-item:hover {
+            background: var(--gray);
+            transform: translateX(5px);
+        }
+
+        .rank-position {
+            width: 40px;
+            text-align: center;
+            font-weight: bold;
+            color: var(--accent);
+        }
+
+        .trader-info {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .trader-name {
+            color: var(--text);
+            font-weight: 500;
+        }
+
+        .trader-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+        }
+
+        .portfolio-value {
+            color: var(--accent);
+        }
+
+        .profit-percentage {
+            font-weight: 500;
+        }
+
+        .positive {
+            color: var(--green);
+        }
+
+        .negative {
+            color: var(--red);
+        }
+
+        /* Scrollbar Styling */
+        .leaderboard-content::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .leaderboard-content::-webkit-scrollbar-track {
+            background: var(--black);
+            border-radius: 4px;
+        }
+
+        .leaderboard-content::-webkit-scrollbar-thumb {
+            background: var(--gray);
+            border-radius: 4px;
+        }
+
+        .leaderboard-content::-webkit-scrollbar-thumb:hover {
+            background: var(--light-gray);
+        }
+
+        .trending-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 3px;
+            font-size: 0.8rem;
+            color: var(--text);
+            background: linear-gradient(45deg, #ff6b6b, #ff8e8e);
+            margin-left: 1rem;
+        }
+
+        .trending-icon {
+            font-size: 1rem;
+        }
+
+        .trending-row {
+            background: rgba(255, 107, 107, 0.05);
+        }
+
+        /* Add these styles in the style section */
+        .stock-search-container {
+            margin: 2rem 0;
+        }
+
+        .search-wrapper {
+            position: relative;
+            max-width: 600px;
+        }
+
+        .stock-search-input {
+            width: 100%;
+            padding: 1rem;
+            padding-left: 3rem;
+            background: var(--dark-gray);
+            border: 1px solid var(--gray);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .stock-search-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(136, 136, 136, 0.1);
+        }
+
+        .search-wrapper .search-icon {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--accent);
+            font-size: 1.2rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <aside class="sidebar">
+            <h1 class="logo">WEENSTOCKS</h1>
+            <a href="{{ url_for('portfolio') }}" class="portfolio-btn">
+                <i class="fas fa-chart-pie"></i> Portfolio
+            </a>
+            {% if user.is_admin %}
+            <a href="{{ url_for('admin_panel') }}" class="portfolio-btn" style="background: var(--black); margin-top: -1rem;">
+                <i class="fas fa-shield-alt"></i> Admin Panel
+            </a>
+            {% endif %}
+            <div class="wallet">
+                <div class="wallet-label">
+                    <i class="fas fa-wallet"></i>
+                    <span>Balance</span>
+                </div>
+                <div class="wallet-balance">${{ "%.2f"|format(user.cash) }}</div>
+            </div>
+            <a href="{{ url_for('logout') }}" class="logout-btn">
+                <i class="fas fa-sign-out-alt"></i>
+                Logout
+            </a>
+        </aside>
+
+        <main class="main-content">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="flash {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="holdings-summary">
+                <div class="summary-card">
+                    <div class="summary-label">Total Investment</div>
+                    <div class="summary-value">${{ "%.2f"|format(user.cash) }}</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">Current Value</div>
+                    <div class="summary-value">${{ "%.2f"|format(total_portfolio_value) }}</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">Day's P&L</div>
+                    <div class="summary-value {% if day_pl > 0 %}positive-change{% else %}negative-change{% endif %}">
+                        ${{ "%.2f"|format(day_pl|abs) }}
+                    </div>
+                    <div class="summary-change {% if day_pl > 0 %}positive-change{% else %}negative-change{% endif %}">
+                        ({{ "%.2f"|format(day_pl_percentage) }}%)
+                    </div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">Total P&L</div>
+                    <div class="summary-value {% if total_pl > 0 %}positive-change{% else %}negative-change{% endif %}">
+                        ${{ "%.2f"|format(total_pl|abs) }}
+                    </div>
+                    <div class="summary-change {% if total_pl > 0 %}positive-change{% else %}negative-change{% endif %}">
+                        ({{ "%.2f"|format(total_pl_percentage) }}%)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Leaderboard Toggle Button -->
+            <button id="leaderboardToggle" class="leaderboard-toggle">
+                <span class="trophy-icon">🏆</span>
+                <span class="toggle-text">Show Leaderboard</span>
+            </button>
+
+            <!-- Leaderboard Window -->
+            <div id="leaderboardWindow" class="leaderboard-window hidden">
+                <div class="leaderboard-header">
+                    <h3>Top Traders</h3>
+                    <div class="leaderboard-controls">
+                        <button id="refreshLeaderboard" class="refresh-btn" title="Refresh">🔄</button>
+                        <button id="minimizeLeaderboard" class="minimize-btn" title="Minimize">_</button>
+                        <button id="closeLeaderboard" class="close-btn" title="Close">×</button>
+                    </div>
+                </div>
+
+                <!-- Current User's Rank (Fixed) -->
+                <div class="current-user-rank">
+                    {% set user_rank = none %}
+                    {% for rank in rankings %}
+                        {% if rank.username == user.username %}
+                            {% set user_rank = rank %}
+                        {% endif %}
+                    {% endfor %}
+                    <div class="rank-info">
+                        <div class="rank-label">Your Position</div>
+                        <div class="rank-value">
+                            {% if user_rank %}
+                                <span class="rank-number">#{{ user_rank.position }}</span>
+                                <span class="rank-details">
+                                    {{ user_rank.value_formatted }}
+                                    <span class="rank-change {% if user_rank.profit_loss_percentage >= 0 %}positive{% else %}negative{% endif %}">
+                                        ({{ "%.2f"|format(user_rank.profit_loss_percentage) }}%)
+                                    </span>
+                                </span>
+                            {% else %}
+                                <span class="rank-number">Unranked</span>
+                                <span class="rank-details">Start trading to rank!</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Search Bar -->
+                <div class="leaderboard-search">
+                    <input type="text" id="rankingSearch" placeholder="Search traders..." class="search-input">
+                    <i class="fas fa-search search-icon"></i>
+                </div>
+
+                <div class="leaderboard-content">
+                    <div class="leaderboard-list">
+                        {% for rank in rankings %}
+                            <div class="leaderboard-item {% if rank.username == user.username %}current-user{% endif %}" data-username="{{ rank.username }}">
+                                <div class="rank-position">
+                                    {% if rank.position <= 3 %}
+                                        <span class="trophy">
+                                            {% if rank.position == 1 %}🥇
+                                            {% elif rank.position == 2 %}🥈
+                                            {% else %}🥉{% endif %}
+                                        </span>
+                                    {% else %}
+                                        #{{ rank.position }}
+                                    {% endif %}
+                                </div>
+                                <div class="trader-info">
+                                    <span class="trader-name">{{ rank.username }}</span>
+                                    <div class="trader-stats">
+                                        <span class="portfolio-value">{{ rank.value_formatted }}</span>
+                                        <span class="profit-percentage {% if rank.profit_loss_percentage >= 0 %}positive{% else %}negative{% endif %}">
+                                            {{ "%.2f"|format(rank.profit_loss_percentage) }}%
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Add Stock Search Bar -->
+            <div class="stock-search-container">
+                <div class="search-wrapper">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" id="stockSearch" class="stock-search-input" placeholder="Search stocks by symbol or name...">
+                </div>
+            </div>
+
+            <table class="stocks-table">
+                <thead>
+                    <tr>
+                        <th>Instrument</th>
+                        <th>Qty.</th>
+                        <th>Avg. cost</th>
+                        <th>LTP</th>
+                        <th>Current Value</th>
+                        <th>P&L</th>
+                        <th>Net chg.</th>
+                        <th>Day chg.</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for stock in stocks %}
+                    <tr {% if loop.index <= 3 %}class="trending-row"{% endif %}>
+                        <td>
+                            {{ stock.symbol }}
+                            {% if loop.index <= 3 %}
+                            <span class="trending-indicator">
+                                <i class="fas fa-fire trending-icon"></i>
+                                Trending
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td>{{ positions[stock.id].shares if stock.id in positions else 0 }}</td>
+                        <td>${{ "%.2f"|format(stock.initial_price) }}</td>
+                        <td>${{ "%.2f"|format(stock.price) }}</td>
+                        <td>${{ "%.2f"|format(stock.price * (positions[stock.id].shares if stock.id in positions else 0)) }}</td>
+                        <td class="{% if stock.get_net_change() > 0 %}positive-change{% else %}negative-change{% endif %}">
+                            ${{ "%.2f"|format(((stock.price - stock.initial_price) * (positions[stock.id].shares if stock.id in positions else 0))|abs) }}
+                        </td>
+                        <td class="{% if stock.get_net_change() > 0 %}positive-change{% else %}negative-change{% endif %}">
+                            {{ "%+.2f"|format(stock.get_net_change()) }}%
+                        </td>
+                        <td class="{% if stock.get_day_change() > 0 %}positive-change{% else %}negative-change{% endif %}">
+                            {{ "%+.2f"|format(stock.get_day_change()) }}%
+                        </td>
+                        <td>
+                            <form class="trade-form" action="{{ url_for('trade') }}" method="POST">
+                                <input type="hidden" name="symbol" value="{{ stock.symbol }}">
+                                <input type="number" name="quantity" class="trade-input" min="1" placeholder="Qty" required>
+                                <div class="trade-buttons">
+                                    <button type="submit" name="action" value="buy" class="trade-btn buy-btn">Buy</button>
+                                    <button type="submit" name="action" value="sell" class="trade-btn sell-btn">Sell</button>
+                                </div>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </main>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('DOM loaded'); // Debug log
+
+        // Get DOM elements
+        const leaderboardToggle = document.getElementById('leaderboardToggle');
+        const leaderboardWindow = document.getElementById('leaderboardWindow');
+        const closeLeaderboard = document.getElementById('closeLeaderboard');
+        const minimizeLeaderboard = document.getElementById('minimizeLeaderboard');
+        const refreshLeaderboard = document.getElementById('refreshLeaderboard');
+        
+        // Debug log to check if elements are found
+        console.log('Toggle button:', leaderboardToggle);
+        console.log('Leaderboard window:', leaderboardWindow);
+        
+        let isMinimized = false;
+        
+        // Toggle leaderboard visibility
+        function toggleLeaderboard() {
+            console.log('Toggle clicked'); // Debug log
+            if (leaderboardWindow) {
+                leaderboardWindow.classList.toggle('hidden');
+                const isHidden = leaderboardWindow.classList.contains('hidden');
+                const toggleText = leaderboardToggle.querySelector('.toggle-text');
+                if (toggleText) {
+                    toggleText.textContent = isHidden ? 'Show Leaderboard' : 'Hide Leaderboard';
+                }
+            }
+        }
+        
+        // Minimize leaderboard
+        function minimizeLeaderboardFn() {
+            const content = leaderboardWindow.querySelector('.leaderboard-content');
+            if (content) {
+                content.style.display = isMinimized ? 'block' : 'none';
+                minimizeLeaderboard.textContent = isMinimized ? '_' : '□';
+                isMinimized = !isMinimized;
+            }
+        }
+        
+        // Refresh leaderboard data
+        async function refreshLeaderboardData() {
+            try {
+                const response = await fetch('/leaderboard?format=json');
+                if (response.ok) {
+                    const data = await response.json();
+                    const scrollPosition = document.querySelector('.leaderboard-content').scrollTop;
+                    updateLeaderboardUI(data.rankings);
+                    document.querySelector('.leaderboard-content').scrollTop = scrollPosition;
+                }
+            } catch (error) {
+                console.error('Failed to refresh leaderboard:', error);
+            }
+        }
+        
+        // Update leaderboard UI
+        function updateLeaderboardUI(rankings) {
+            // Update current user's rank
+            const currentUser = '{{ user.username }}';
+            const userRank = rankings.find(r => r.username === currentUser);
+            const rankInfo = document.querySelector('.rank-info');
+            
+            if (rankInfo && userRank) {
+                rankInfo.innerHTML = `
+                    <div class="rank-label">Your Position</div>
+                    <div class="rank-value">
+                        <span class="rank-number">#${userRank.position}</span>
+                        <span class="rank-details">
+                            ${userRank.value_formatted}
+                            <span class="rank-change ${userRank.profit_loss_percentage >= 0 ? 'positive' : 'negative'}">
+                                (${userRank.profit_loss_percentage.toFixed(2)}%)
+                            </span>
+                        </span>
+                    </div>
+                `;
+            }
+
+            // Update rankings list
+            const list = document.querySelector('.leaderboard-list');
+            if (list) {
+                list.innerHTML = rankings.map(rank => `
+                    <div class="leaderboard-item ${rank.username === currentUser ? 'current-user' : ''}" 
+                         data-username="${rank.username}">
+                        <div class="rank-position">
+                            ${rank.position <= 3 
+                                ? `<span class="trophy">${
+                                    rank.position === 1 ? '🥇' : 
+                                    rank.position === 2 ? '🥈' : '🥉'
+                                  }</span>`
+                                : `#${rank.position}`}
+                        </div>
+                        <div class="trader-info">
+                            <span class="trader-name">${rank.username}</span>
+                            <div class="trader-stats">
+                                <span class="portfolio-value">${rank.value_formatted}</span>
+                                <span class="profit-percentage ${rank.profit_loss_percentage >= 0 ? 'positive' : 'negative'}">
+                                    ${rank.profit_loss_percentage.toFixed(2)}%
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+        
+        // Add event listeners
+        if (leaderboardToggle) {
+            leaderboardToggle.addEventListener('click', function(e) {
+                e.preventDefault();
+                toggleLeaderboard();
+            });
+        }
+        
+        if (closeLeaderboard) {
+            closeLeaderboard.addEventListener('click', function(e) {
+                e.preventDefault();
+                toggleLeaderboard();
+            });
+        }
+        
+        if (minimizeLeaderboard) {
+            minimizeLeaderboard.addEventListener('click', function(e) {
+                e.preventDefault();
+                minimizeLeaderboardFn();
+            });
+        }
+        
+        if (refreshLeaderboard) {
+            refreshLeaderboard.addEventListener('click', function(e) {
+                e.preventDefault();
+                refreshLeaderboardData();
+            });
+        }
+        
+        // Make the leaderboard draggable
+        const header = leaderboardWindow ? leaderboardWindow.querySelector('.leaderboard-header') : null;
+        let isDragging = false;
+        let currentX;
+        let currentY;
+        let initialX;
+        let initialY;
+        let xOffset = 0;
+        let yOffset = 0;
+
+        if (header) {
+            header.addEventListener('mousedown', dragStart);
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', dragEnd);
+        }
+
+        function dragStart(e) {
+            if (e.target === header) {
+                initialX = e.clientX - xOffset;
+                initialY = e.clientY - yOffset;
+                isDragging = true;
+            }
+        }
+
+        function drag(e) {
+            if (isDragging) {
+                e.preventDefault();
+                currentX = e.clientX - initialX;
+                currentY = e.clientY - initialY;
+                xOffset = currentX;
+                yOffset = currentY;
+
+                setTranslate(currentX, currentY, leaderboardWindow);
+            }
+        }
+
+        function setTranslate(xPos, yPos, el) {
+            if (el) {
+                el.style.transform = `translate3d(${xPos}px, ${yPos}px, 0)`;
+            }
+        }
+
+        function dragEnd(e) {
+            initialX = currentX;
+            initialY = currentY;
+            isDragging = false;
+        }
+        
+        // Add search functionality
+        const searchInput = document.getElementById('rankingSearch');
+        if (searchInput) {
+            searchInput.addEventListener('input', function(e) {
+                const searchTerm = e.target.value.toLowerCase();
+                const items = document.querySelectorAll('.leaderboard-item');
+                
+                items.forEach(item => {
+                    const username = item.dataset.username.toLowerCase();
+                    if (username.includes(searchTerm)) {
+                        item.style.display = 'flex';
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
+            });
+        }
+
+        // Stock search functionality
+        const stockSearch = document.getElementById('stockSearch');
+        const stockRows = document.querySelectorAll('.stocks-table tbody tr');
+
+        if (stockSearch) {
+            stockSearch.addEventListener('input', function(e) {
+                const searchTerm = e.target.value.toLowerCase();
+                
+                stockRows.forEach(row => {
+                    const symbol = row.querySelector('td:first-child').textContent.toLowerCase();
+                    const matches = symbol.includes(searchTerm);
+                    row.style.display = matches ? '' : 'none';
+                });
+            });
+
+            // Add keyboard shortcut (Ctrl/Cmd + F) to focus search
+            document.addEventListener('keydown', function(e) {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                    e.preventDefault();
+                    stockSearch.focus();
+                }
+            });
+        }
+    });
+    </script>
+</body>
+</html> 
