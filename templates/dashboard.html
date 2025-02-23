@@ -722,6 +722,36 @@
             color: var(--accent);
             font-size: 1.2rem;
         }
+
+        /* Add these styles to the existing style section */
+        .sortable {
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+        }
+
+        .sortable:hover {
+            background: var(--dark-gray);
+        }
+
+        .sortable i {
+            margin-left: 5px;
+            font-size: 0.8em;
+            opacity: 0.5;
+        }
+
+        .sortable.asc i {
+            opacity: 1;
+            transform: rotate(180deg);
+        }
+
+        .sortable.desc i {
+            opacity: 1;
+        }
+
+        .sortable:hover i {
+            opacity: 0.8;
+        }
     </style>
 </head>
 <body>
@@ -730,6 +760,12 @@
             <h1 class="logo">WEENSTOCKS</h1>
             <a href="{{ url_for('portfolio') }}" class="portfolio-btn">
                 <i class="fas fa-chart-pie"></i> Portfolio
+            </a>
+            <a href="{{ url_for('predictions') }}" class="portfolio-btn" style="margin-top: -1rem;">
+                <i class="fas fa-chart-line"></i> Predictions
+            </a>
+            <a href="{{ url_for('leaderboard') }}" class="portfolio-btn" style="margin-top: -1rem;">
+                <i class="fas fa-trophy"></i> Leaderboard
             </a>
             {% if user.is_admin %}
             <a href="{{ url_for('admin_panel') }}" class="portfolio-btn" style="background: var(--black); margin-top: -1rem;">
@@ -787,86 +823,6 @@
                 </div>
             </div>
 
-            <!-- Leaderboard Toggle Button -->
-            <button id="leaderboardToggle" class="leaderboard-toggle">
-                <span class="trophy-icon">🏆</span>
-                <span class="toggle-text">Show Leaderboard</span>
-            </button>
-
-            <!-- Leaderboard Window -->
-            <div id="leaderboardWindow" class="leaderboard-window hidden">
-                <div class="leaderboard-header">
-                    <h3>Top Traders</h3>
-                    <div class="leaderboard-controls">
-                        <button id="refreshLeaderboard" class="refresh-btn" title="Refresh">🔄</button>
-                        <button id="minimizeLeaderboard" class="minimize-btn" title="Minimize">_</button>
-                        <button id="closeLeaderboard" class="close-btn" title="Close">×</button>
-                    </div>
-                </div>
-
-                <!-- Current User's Rank (Fixed) -->
-                <div class="current-user-rank">
-                    {% set user_rank = none %}
-                    {% for rank in rankings %}
-                        {% if rank.username == user.username %}
-                            {% set user_rank = rank %}
-                        {% endif %}
-                    {% endfor %}
-                    <div class="rank-info">
-                        <div class="rank-label">Your Position</div>
-                        <div class="rank-value">
-                            {% if user_rank %}
-                                <span class="rank-number">#{{ user_rank.position }}</span>
-                                <span class="rank-details">
-                                    {{ user_rank.value_formatted }}
-                                    <span class="rank-change {% if user_rank.profit_loss_percentage >= 0 %}positive{% else %}negative{% endif %}">
-                                        ({{ "%.2f"|format(user_rank.profit_loss_percentage) }}%)
-                                    </span>
-                                </span>
-                            {% else %}
-                                <span class="rank-number">Unranked</span>
-                                <span class="rank-details">Start trading to rank!</span>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Search Bar -->
-                <div class="leaderboard-search">
-                    <input type="text" id="rankingSearch" placeholder="Search traders..." class="search-input">
-                    <i class="fas fa-search search-icon"></i>
-                </div>
-
-                <div class="leaderboard-content">
-                    <div class="leaderboard-list">
-                        {% for rank in rankings %}
-                            <div class="leaderboard-item {% if rank.username == user.username %}current-user{% endif %}" data-username="{{ rank.username }}">
-                                <div class="rank-position">
-                                    {% if rank.position <= 3 %}
-                                        <span class="trophy">
-                                            {% if rank.position == 1 %}🥇
-                                            {% elif rank.position == 2 %}🥈
-                                            {% else %}🥉{% endif %}
-                                        </span>
-                                    {% else %}
-                                        #{{ rank.position }}
-                                    {% endif %}
-                                </div>
-                                <div class="trader-info">
-                                    <span class="trader-name">{{ rank.username }}</span>
-                                    <div class="trader-stats">
-                                        <span class="portfolio-value">{{ rank.value_formatted }}</span>
-                                        <span class="profit-percentage {% if rank.profit_loss_percentage >= 0 %}positive{% else %}negative{% endif %}">
-                                            {{ "%.2f"|format(rank.profit_loss_percentage) }}%
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-
             <!-- Add Stock Search Bar -->
             <div class="stock-search-container">
                 <div class="search-wrapper">
@@ -878,14 +834,14 @@
             <table class="stocks-table">
                 <thead>
                     <tr>
-                        <th>Instrument</th>
-                        <th>Qty.</th>
-                        <th>Avg. cost</th>
-                        <th>LTP</th>
-                        <th>Current Value</th>
-                        <th>P&L</th>
-                        <th>Net chg.</th>
-                        <th>Day chg.</th>
+                        <th class="sortable" data-sort="symbol">Instrument <i class="fas fa-sort"></i></th>
+                        <th class="sortable" data-sort="quantity">Qty. <i class="fas fa-sort"></i></th>
+                        <th class="sortable" data-sort="cost">Avg. cost <i class="fas fa-sort"></i></th>
+                        <th class="sortable" data-sort="price">LTP <i class="fas fa-sort"></i></th>
+                        <th class="sortable" data-sort="value">Current Value <i class="fas fa-sort"></i></th>
+                        <th class="sortable" data-sort="pl">P&L <i class="fas fa-sort"></i></th>
+                        <th class="sortable" data-sort="net">Net chg. <i class="fas fa-sort"></i></th>
+                        <th class="sortable" data-sort="day">Day chg. <i class="fas fa-sort"></i></th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -1154,6 +1110,91 @@
                 }
             });
         }
+
+        // Sorting functionality
+        const table = document.querySelector('.stocks-table');
+        const headers = table.querySelectorAll('th.sortable');
+        let currentSort = { column: null, direction: 'asc' };
+
+        function sortTable(column) {
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            
+            // Reset all headers
+            headers.forEach(header => {
+                header.classList.remove('asc', 'desc');
+            });
+
+            // Update sort direction
+            if (currentSort.column === column) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.column = column;
+                currentSort.direction = 'asc';
+            }
+
+            // Add sort indicator to current header
+            const currentHeader = Array.from(headers).find(header => header.dataset.sort === column);
+            currentHeader.classList.add(currentSort.direction);
+
+            // Sort rows
+            rows.sort((a, b) => {
+                let aValue, bValue;
+                
+                switch(column) {
+                    case 'symbol':
+                        aValue = a.cells[0].textContent.trim();
+                        bValue = b.cells[0].textContent.trim();
+                        break;
+                    case 'quantity':
+                        aValue = parseInt(a.cells[1].textContent);
+                        bValue = parseInt(b.cells[1].textContent);
+                        break;
+                    case 'cost':
+                    case 'price':
+                    case 'value':
+                        aValue = parseFloat(a.cells[getColumnIndex(column)].textContent.replace('$', ''));
+                        bValue = parseFloat(b.cells[getColumnIndex(column)].textContent.replace('$', ''));
+                        break;
+                    case 'pl':
+                    case 'net':
+                    case 'day':
+                        aValue = parseFloat(a.cells[getColumnIndex(column)].textContent.replace('$', '').replace('%', ''));
+                        bValue = parseFloat(b.cells[getColumnIndex(column)].textContent.replace('$', '').replace('%', ''));
+                        break;
+                    default:
+                        return 0;
+                }
+
+                if (aValue === bValue) return 0;
+                
+                const comparison = aValue > bValue ? 1 : -1;
+                return currentSort.direction === 'asc' ? comparison : -comparison;
+            });
+
+            // Reorder rows in the table
+            rows.forEach(row => tbody.appendChild(row));
+        }
+
+        function getColumnIndex(column) {
+            switch(column) {
+                case 'cost': return 2;
+                case 'price': return 3;
+                case 'value': return 4;
+                case 'pl': return 5;
+                case 'net': return 6;
+                case 'day': return 7;
+                default: return 0;
+            }
+        }
+
+        // Add click event listeners to sortable headers
+        headers.forEach(header => {
+            header.addEventListener('click', () => {
+                const column = header.dataset.sort;
+                sortTable(column);
+            });
+        });
     });
     </script>
 </body>

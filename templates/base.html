@@ -1,14 +1,42 @@
-<div class="nav-links">
-    {% if 'user_id' in session %}
-        <a href="{{ url_for('dashboard') }}">Dashboard</a>
-        <a href="{{ url_for('portfolio') }}">Portfolio</a>
-        <a href="{{ url_for('leaderboard') }}">Leaderboard</a>
-        {% if user and user.is_admin %}
-            <a href="{{ url_for('admin_panel') }}">Admin Panel</a>
-        {% endif %}
-        <a href="{{ url_for('logout') }}">Logout</a>
-    {% else %}
-        <a href="{{ url_for('login') }}">Login</a>
-        <a href="{{ url_for('signup') }}">Sign Up</a>
-    {% endif %}
-</div> 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WEENSTOCKS</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    {% block head %}{% endblock %}
+</head>
+<body class="bg-black text-white">
+    <nav class="bg-gray-900">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <a href="{{ url_for('dashboard') }}" class="text-white font-bold text-xl">WEENSTOCKS</a>
+                </div>
+                <div class="nav-links flex space-x-4">
+                    {% if 'user_id' in session %}
+                        <a href="{{ url_for('dashboard') }}" class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Dashboard</a>
+                        <a href="{{ url_for('portfolio') }}" class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Portfolio</a>
+                        <a href="{{ url_for('predictions') }}" class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Predictions</a>
+                        <a href="{{ url_for('leaderboard') }}" class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Leaderboard</a>
+                        {% if user and user.is_admin %}
+                            <a href="{{ url_for('admin_panel') }}" class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Admin</a>
+                        {% endif %}
+                        <a href="{{ url_for('logout') }}" class="text-red-500 hover:text-red-400 px-3 py-2 rounded-md text-sm font-medium">Logout</a>
+                    {% else %}
+                        <a href="{{ url_for('login') }}" class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Login</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html> 

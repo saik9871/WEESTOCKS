@@ -6,6 +6,8 @@ from functools import wraps
 import math
 import os
 from dotenv import load_dotenv
+import requests
+from urllib.parse import urlencode
 
 # Load environment variables
 load_dotenv()
@@ -20,16 +22,32 @@ if database_url.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-here')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=31)  # Session lasts for 31 days
+
+# Twitch OAuth Configuration
+TWITCH_CLIENT_ID = 'shdewm91zxskpkg12fi3hphsfsajlc'
+TWITCH_CLIENT_SECRET = 'q4kuhmknmf7i56mxwz4tfkkad18av3'
+TWITCH_REDIRECT_URI = os.getenv('TWITCH_REDIRECT_URI', 'http://localhost:5000/auth/twitch/callback')
+
 db = SQLAlchemy(app)
 
 # Models
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)
-    cash = db.Column(db.Float, nullable=False, default=10000.0)
+    twitch_id = db.Column(db.String(50), unique=True, nullable=True)
+    twitch_login = db.Column(db.String(80), unique=True, nullable=True)
+    twitch_email = db.Column(db.String(120), unique=True, nullable=True)
+    twitch_profile_image = db.Column(db.String(255), nullable=True)
+    cash = db.Column(db.Float, nullable=False, default=500.0)
     is_admin = db.Column(db.Boolean, default=False)
     can_add_stocks = db.Column(db.Boolean, default=False)
+    is_approved = db.Column(db.Boolean, default=True)  # Changed to True
+    registration_date = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def is_authenticated(self):
+        return True if self.twitch_id else False
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -71,29 +89,35 @@ class StockHistory(db.Model):
     timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     volume = db.Column(db.Integer, nullable=False)
 
+class Prediction(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    question = db.Column(db.String(500), nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    ends_at = db.Column(db.DateTime, nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    is_resolved = db.Column(db.Boolean, default=False)
+    winning_option = db.Column(db.Integer, nullable=True)  # ID of the winning option
+
+class PredictionOption(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    prediction_id = db.Column(db.Integer, db.ForeignKey('prediction.id'), nullable=False)
+    text = db.Column(db.String(100), nullable=False)
+    votes_count = db.Column(db.Integer, default=0)
+
+class Vote(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    prediction_id = db.Column(db.Integer, db.ForeignKey('prediction.id'), nullable=False)
+    option_id = db.Column(db.Integer, db.ForeignKey('prediction_option.id'), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    # Ensure users can only vote once per prediction
+    __table_args__ = (db.UniqueConstraint('user_id', 'prediction_id', name='unique_user_prediction_vote'),)
+
 # Initialize database and add initial stocks only if they don't exist
 with app.app_context():
     db.create_all()  # This will create tables if they don't exist
-    
-    # Create initial admin user if no users exist
-    if not User.query.filter_by(is_admin=True).first():
-        admin_user = User(
-            username='admin',
-            cash=10000.0,
-            is_admin=True
-        )
-        admin_user.set_password('Ts29bp6573#')  # Updated secure password
-        db.session.add(admin_user)
-        db.session.commit()
-        print("Initial admin user created:")
-        print("Username: admin")
-        print("Password: Ts29bp6573#")
-    else:
-        # Update existing admin password if needed
-        admin_user = User.query.filter_by(username='admin').first()
-        admin_user.set_password('Ts29bp6573#')
-        db.session.commit()
-        print("Admin password updated successfully")
     
     # Add initial stocks only if the stocks table is empty
     if not Stock.query.first():
@@ -182,55 +206,154 @@ def calculate_portfolio_value(user_id):
 def welcome():
     return render_template('welcome.html')
 
-@app.route('/login', methods=['GET', 'POST'])
+@app.route('/login')
 def login():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
-        user = User.query.filter_by(username=username).first()
-        if user and user.check_password(password):
-            session['user_id'] = user.id
-            flash('Successfully logged in!', 'success')
-            return redirect(url_for('dashboard'))
-        flash('Invalid username or password', 'error')
+    if 'user_id' in session:
+        return redirect(url_for('dashboard'))
     
-    return render_template('login.html')
+    # Generate Twitch OAuth URL with all necessary scopes
+    params = {
+        'client_id': TWITCH_CLIENT_ID,
+        'redirect_uri': TWITCH_REDIRECT_URI,
+        'response_type': 'code',
+        'scope': 'user:read:email openid',
+        'force_verify': 'true'  # Force Twitch login screen
+    }
+    twitch_auth_url = f"https://id.twitch.tv/oauth2/authorize?{urlencode(params)}"
+    return render_template('login.html', twitch_auth_url=twitch_auth_url)
 
-@app.route('/signup', methods=['GET', 'POST'])
-def signup():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
-        if User.query.filter_by(username=username).first():
-            flash('Username already exists', 'error')
-            return redirect(url_for('signup'))
-        
-        user = User(username=username, cash=500.0)  # Changed initial balance to 500
-        user.set_password(password)
-        db.session.add(user)
-        db.session.commit()
-        
-        flash('Account created successfully! Please login.', 'success')
+@app.route('/auth/twitch/callback')
+def twitch_callback():
+    error = request.args.get('error')
+    error_description = request.args.get('error_description')
+    
+    if error:
+        print(f"Twitch Error: {error} - {error_description}")
+        flash(f'Authentication failed: {error_description}', 'error')
         return redirect(url_for('login'))
     
-    return render_template('signup.html')
+    code = request.args.get('code')
+    if not code:
+        print("No code received from Twitch")
+        flash('Authentication failed: No code received', 'error')
+        return redirect(url_for('login'))
+
+    try:
+        # Exchange code for access token
+        token_url = 'https://id.twitch.tv/oauth2/token'
+        token_params = {
+            'client_id': TWITCH_CLIENT_ID,
+            'client_secret': TWITCH_CLIENT_SECRET,
+            'code': code,
+            'grant_type': 'authorization_code',
+            'redirect_uri': TWITCH_REDIRECT_URI
+        }
+        
+        print("Token params:", token_params)
+        token_response = requests.post(token_url, data=token_params)
+        print("Token response status:", token_response.status_code)
+        print("Token response:", token_response.text)
+        
+        if token_response.status_code != 200:
+            flash(f'Authentication failed: {token_response.text}', 'error')
+            return redirect(url_for('login'))
+            
+        token_data = token_response.json()
+        access_token = token_data.get('access_token')
+        
+        if not access_token:
+            flash('Failed to get access token from Twitch', 'error')
+            return redirect(url_for('login'))
+
+        # Get user info from Twitch
+        user_url = 'https://api.twitch.tv/helix/users'
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Client-Id': TWITCH_CLIENT_ID
+        }
+        user_response = requests.get(user_url, headers=headers)
+        print("User response status:", user_response.status_code)
+        print("User response:", user_response.text)
+        
+        if user_response.status_code != 200:
+            flash(f'Failed to get user data: {user_response.text}', 'error')
+            return redirect(url_for('login'))
+        
+        user_data = user_response.json().get('data', [])
+        if not user_data:
+            flash('Failed to get user data from Twitch', 'error')
+            return redirect(url_for('login'))
+            
+        user_data = user_data[0]
+
+        # Find or create user
+        user = User.query.filter_by(twitch_id=user_data['id']).first()
+        if not user:
+            # Check if this is the first user ever
+            is_first_user = User.query.count() == 0
+            
+            # Check if username already exists
+            existing_user = User.query.filter_by(username=user_data['login']).first()
+            if existing_user:
+                flash('Username already exists with different Twitch account', 'error')
+                return redirect(url_for('login'))
+                
+            user = User(
+                username=user_data['login'],
+                twitch_id=user_data['id'],
+                twitch_login=user_data['login'],
+                twitch_email=user_data.get('email'),
+                twitch_profile_image=user_data.get('profile_image_url'),
+                cash=500.0,
+                is_approved=True,
+                is_admin=is_first_user,  # Make first user admin
+                can_add_stocks=is_first_user  # Give first user all permissions
+            )
+            db.session.add(user)
+            try:
+                db.session.commit()
+                if is_first_user:
+                    flash('Account created successfully! You have been granted admin access.', 'success')
+                else:
+                    flash('Account created successfully! Start trading now.', 'success')
+            except Exception as e:
+                db.session.rollback()
+                flash('Error creating account. Please try again.', 'error')
+                return redirect(url_for('login'))
+
+        # Make the session permanent before setting user_id
+        session.permanent = True
+        session['user_id'] = user.id
+        return redirect(url_for('dashboard'))
+
+    except requests.exceptions.RequestException as e:
+        flash(f'Authentication failed: Network error', 'error')
+        return redirect(url_for('login'))
+    except Exception as e:
+        flash('An unexpected error occurred', 'error')
+        return redirect(url_for('login'))
 
 @app.route('/dashboard')
 def dashboard():
+    # Check if user is logged in
     if 'user_id' not in session:
+        flash('Please login first', 'error')
         return redirect(url_for('login'))
     
+    # Get user and verify they exist
     user = User.query.get(session['user_id'])
-    stocks = Stock.query.all()
+    if not user:
+        # If user doesn't exist, clear session and redirect to login
+        session.clear()
+        flash('User not found. Please login again.', 'error')
+        return redirect(url_for('login'))
     
-    # Sort stocks by day change percentage (trending stocks first)
+    # Get stocks and sort by day change
+    stocks = Stock.query.all()
     stocks = sorted(stocks, key=lambda x: abs(x.get_day_change()), reverse=True)
     
+    # Get user positions
     positions = Position.query.filter_by(user_id=user.id).all()
-    
-    # Create positions dictionary for easy lookup
     positions_dict = {p.stock_id: p for p in positions}
     
     # Calculate portfolio values
@@ -255,26 +378,26 @@ def dashboard():
     day_pl_percentage = (day_pl / total_investment * 100) if total_investment > 0 else 0
     total_pl_percentage = (total_pl / total_investment * 100) if total_investment > 0 else 0
     
-    # Get rankings data for the leaderboard
+    # Get rankings data
     users = User.query.all()
     rankings = []
     
     for u in users:
         portfolio_value = calculate_portfolio_value(u.id)
-        if portfolio_value <= 10000:  # Skip users with no activity
+        if portfolio_value <= 500:  # Skip users with no activity (changed from 10000 to 500)
             continue
         
         ranking_entry = {
             'username': u.username,
             'portfolio_value': portfolio_value,
             'value_formatted': f"${portfolio_value:,.2f}",
-            'profit_loss': portfolio_value - 10000,
-            'profit_loss_formatted': f"${(portfolio_value - 10000):,.2f}",
-            'profit_loss_percentage': ((portfolio_value - 10000) / 10000) * 100
+            'profit_loss': portfolio_value - 500,  # Changed from 10000 to 500
+            'profit_loss_formatted': f"${(portfolio_value - 500):,.2f}",
+            'profit_loss_percentage': ((portfolio_value - 500) / 500) * 100  # Changed from 10000 to 500
         }
         rankings.append(ranking_entry)
     
-    # Sort rankings by portfolio value
+    # Sort rankings
     rankings.sort(key=lambda x: x['portfolio_value'], reverse=True)
     
     # Add rank position
@@ -290,7 +413,7 @@ def dashboard():
                          day_pl_percentage=day_pl_percentage,
                          total_pl=total_pl,
                          total_pl_percentage=total_pl_percentage,
-                         rankings=rankings)  # Add rankings to template context
+                         rankings=rankings)
 
 @app.route('/logout')
 def logout():
@@ -432,7 +555,21 @@ def admin_required(f):
 def admin_panel():
     users = User.query.all()
     stocks = Stock.query.all()
-    return render_template('admin.html', users=users, stocks=stocks)
+    
+    # Add portfolio values for each user
+    user_data = []
+    for user in users:
+        portfolio_value = calculate_portfolio_value(user.id)
+        user_data.append({
+            'user': user,
+            'portfolio_value': portfolio_value,
+            'formatted_value': f"${portfolio_value:,.2f}"
+        })
+    
+    return render_template('admin.html', 
+                         user_data=user_data,
+                         stocks=stocks,
+                         current_user=User.query.get(session['user_id']))
 
 @app.route('/admin/add_stock', methods=['POST'])
 @admin_required
@@ -492,69 +629,243 @@ def delete_stock(stock_id):
         flash('Stock not found', 'error')
     return redirect(url_for('admin_panel'))
 
+@app.route('/admin/toggle_admin/<int:user_id>')
+@admin_required
+def toggle_admin(user_id):
+    user = User.query.get(user_id)
+    if user:
+        # Prevent removing admin status from the last admin
+        if user.is_admin and User.query.filter_by(is_admin=True).count() <= 1:
+            return jsonify({
+                'success': False,
+                'message': 'Cannot remove the last admin user'
+            }), 400
+            
+        user.is_admin = not user.is_admin
+        # When making someone admin, also give them stock adding permission
+        if user.is_admin:
+            user.can_add_stocks = True
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'is_admin': user.is_admin,
+            'message': f'Admin status {"granted to" if user.is_admin else "revoked from"} {user.username}'
+        })
+    return jsonify({'success': False, 'message': 'User not found'}), 404
+
 @app.route('/leaderboard')
 def leaderboard():
     if 'user_id' not in session:
         return redirect(url_for('login'))
-        
-    timeframe = request.args.get('timeframe', 'all')  # all, weekly, monthly
-    response_format = request.args.get('format', 'html')  # html or json
     
-    # Get current user
-    current_user = User.query.get(session['user_id'])
-    
-    # Get all users
+    # Get all users and calculate their portfolio values
     users = User.query.all()
-    
-    # Calculate portfolio values and create ranking data
-    rankings = []
-    now = datetime.utcnow()
+    leaderboard_data = []
     
     for user in users:
         portfolio_value = calculate_portfolio_value(user.id)
-        
-        # Skip users with no activity
-        if portfolio_value <= 10000:  # Initial cash amount
-            continue
-            
-        ranking_entry = {
+        leaderboard_data.append({
             'username': user.username,
+            'profile_image': user.twitch_profile_image,
             'portfolio_value': portfolio_value,
-            'value_formatted': f"${portfolio_value:,.2f}",
-            'profit_loss': portfolio_value - 10000,  # Compared to initial cash
-            'profit_loss_formatted': f"${(portfolio_value - 10000):,.2f}",
-            'profit_loss_percentage': ((portfolio_value - 10000) / 10000) * 100
-        }
-        rankings.append(ranking_entry)
-    
-    # Sort rankings by portfolio value (descending)
-    rankings.sort(key=lambda x: x['portfolio_value'], reverse=True)
-    
-    # Add rank position
-    for i, rank in enumerate(rankings):
-        rank['position'] = i + 1
-    
-    # Filter based on timeframe
-    if timeframe == 'weekly':
-        week_ago = now - timedelta(days=7)
-        # In a real app, you'd filter based on historical data
-        rankings = rankings[:10]  # Simplified: just show top 10 for demo
-    elif timeframe == 'monthly':
-        month_ago = now - timedelta(days=30)
-        # In a real app, you'd filter based on historical data
-        rankings = rankings[:20]  # Simplified: just show top 20 for demo
-    
-    if response_format == 'json':
-        return jsonify({
-            'rankings': rankings,
-            'current_time': now.strftime('%Y-%m-%d %H:%M:%S UTC')
+            'cash': user.cash,
+            'registration_date': user.registration_date
         })
     
-    return render_template('leaderboard.html',
-                         rankings=rankings,
-                         timeframe=timeframe,
-                         current_time=now.strftime('%Y-%m-%d %H:%M:%S UTC'),
-                         session_username=current_user.username)
+    # Sort users by portfolio value in descending order
+    leaderboard_data.sort(key=lambda x: x['portfolio_value'], reverse=True)
+    
+    # Calculate ranks and find current user's rank
+    current_user_rank = None
+    for i, data in enumerate(leaderboard_data):
+        if data['username'] == User.query.get(session['user_id']).username:
+            current_user_rank = i + 1
+            break
+    
+    return render_template('leaderboard.html', 
+                         leaderboard=leaderboard_data, 
+                         current_user_rank=current_user_rank)
+
+@app.route('/admin/approve_user/<int:user_id>')
+@admin_required
+def approve_user(user_id):
+    user = User.query.get(user_id)
+    if user:
+        user.is_approved = not user.is_approved
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'is_approved': user.is_approved,
+            'message': f'User {"approved" if user.is_approved else "unapproved"}'
+        })
+    return jsonify({'success': False, 'message': 'User not found'}), 404
+
+@app.route('/make_first_user_admin')
+def make_first_user_admin():
+    # Get the first user
+    first_user = User.query.order_by(User.id).first()
+    if first_user:
+        first_user.is_admin = True
+        first_user.can_add_stocks = True
+        db.session.commit()
+        flash('First user has been granted admin access!', 'success')
+    return redirect(url_for('dashboard'))
+
+@app.route('/predictions')
+def predictions():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    user = User.query.get(session['user_id'])
+    if not user:
+        session.clear()
+        return redirect(url_for('login'))
+
+    # Get active and past predictions
+    active_predictions = Prediction.query.filter_by(is_active=True).order_by(Prediction.created_at.desc()).all()
+    past_predictions = Prediction.query.filter_by(is_active=False).order_by(Prediction.created_at.desc()).limit(10).all()
+    
+    # Get user's votes
+    user_votes = Vote.query.filter_by(user_id=user.id).all()
+    user_votes_dict = {vote.prediction_id: vote.option_id for vote in user_votes}
+    
+    # Get options for each prediction
+    prediction_options = {}
+    for pred in active_predictions + past_predictions:
+        options = PredictionOption.query.filter_by(prediction_id=pred.id).all()
+        prediction_options[pred.id] = options
+    
+    return render_template('predictions.html',
+                         user=user,
+                         active_predictions=active_predictions,
+                         past_predictions=past_predictions,
+                         prediction_options=prediction_options,
+                         user_votes=user_votes_dict)
+
+@app.route('/admin/create_prediction', methods=['POST'])
+@admin_required
+def create_prediction():
+    if not request.is_json:
+        return jsonify({'error': 'Request must be JSON'}), 400
+    
+    data = request.get_json()
+    
+    # Validate required fields
+    if not all(k in data for k in ['question', 'options', 'duration_hours']):
+        return jsonify({'error': 'Missing required fields'}), 400
+    
+    try:
+        # Create prediction
+        prediction = Prediction(
+            question=data['question'],
+            created_by=session['user_id'],
+            ends_at=datetime.utcnow() + timedelta(hours=int(data['duration_hours'])),
+            is_active=True
+        )
+        db.session.add(prediction)
+        db.session.flush()  # Get prediction ID
+        
+        # Create options
+        for option_text in data['options']:
+            option = PredictionOption(
+                prediction_id=prediction.id,
+                text=option_text
+            )
+            db.session.add(option)
+        
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Prediction created successfully'})
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/vote', methods=['POST'])
+def vote():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Please login first'}), 401
+    
+    data = request.get_json()
+    if not all(k in data for k in ['prediction_id', 'option_id']):
+        return jsonify({'error': 'Missing required fields'}), 400
+    
+    try:
+        # Check if prediction is still active
+        prediction = Prediction.query.get(data['prediction_id'])
+        if not prediction or not prediction.is_active:
+            return jsonify({'error': 'Prediction is not active'}), 400
+        
+        # Check if user already voted
+        existing_vote = Vote.query.filter_by(
+            user_id=session['user_id'],
+            prediction_id=data['prediction_id']
+        ).first()
+        
+        if existing_vote:
+            return jsonify({'error': 'You have already voted on this prediction'}), 400
+        
+        # Create vote
+        vote = Vote(
+            user_id=session['user_id'],
+            prediction_id=data['prediction_id'],
+            option_id=data['option_id']
+        )
+        db.session.add(vote)
+        
+        # Update vote count
+        option = PredictionOption.query.get(data['option_id'])
+        option.votes_count += 1
+        
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Vote recorded successfully'})
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/resolve_prediction', methods=['POST'])
+@admin_required
+def resolve_prediction():
+    data = request.get_json()
+    if not all(k in data for k in ['prediction_id', 'winning_option_id']):
+        return jsonify({'error': 'Missing required fields'}), 400
+    
+    try:
+        prediction = Prediction.query.get(data['prediction_id'])
+        if not prediction:
+            return jsonify({'error': 'Prediction not found'}), 404
+        
+        prediction.is_active = False
+        prediction.is_resolved = True
+        prediction.winning_option = data['winning_option_id']
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Prediction resolved successfully'})
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/admin/delete_prediction/<int:prediction_id>', methods=['POST'])
+@admin_required
+def delete_prediction(prediction_id):
+    try:
+        prediction = Prediction.query.get(prediction_id)
+        if not prediction:
+            return jsonify({'error': 'Prediction not found'}), 404
+        
+        # Delete associated votes and options
+        Vote.query.filter_by(prediction_id=prediction_id).delete()
+        PredictionOption.query.filter_by(prediction_id=prediction_id).delete()
+        db.session.delete(prediction)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Prediction deleted successfully'})
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True) 

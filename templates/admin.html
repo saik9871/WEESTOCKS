@@ -16,6 +16,7 @@
             --accent: #888888;
             --green: #00cc00;
             --red: #cc0000;
+            --twitch: #6441a5;
         }
 
         * {
@@ -151,8 +152,9 @@
         }
 
         .user-item {
-            display: flex;
-            justify-content: space-between;
+            display: grid;
+            grid-template-columns: auto 1fr auto auto;
+            gap: 1rem;
             align-items: center;
             padding: 1rem;
             background: var(--black);
@@ -160,40 +162,70 @@
             margin-bottom: 1rem;
         }
 
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
         }
 
-        .permission-toggle {
-            position: relative;
-            width: 50px;
-            height: 26px;
-            border-radius: 13px;
-            background: var(--gray);
+        .user-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .twitch-login {
+            color: var(--twitch);
+            font-size: 0.9rem;
+        }
+
+        .user-status {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .status-badge {
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            font-size: 0.8rem;
+        }
+
+        .status-badge.pending {
+            background: #cccc00;
+            color: var(--black);
+        }
+
+        .status-badge.approved {
+            background: var(--green);
+        }
+
+        .status-badge.admin {
+            background: var(--twitch);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .approve-btn {
+            background: var(--green);
+            color: var(--text);
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
             cursor: pointer;
             transition: all 0.3s ease;
         }
 
-        .permission-toggle.active {
-            background: var(--green);
+        .approve-btn.unapprove {
+            background: #cccc00;
         }
 
-        .permission-toggle::after {
-            content: '';
-            position: absolute;
-            top: 3px;
-            left: 3px;
-            width: 20px;
-            height: 20px;
-            background: var(--text);
-            border-radius: 50%;
-            transition: all 0.3s ease;
-        }
-
-        .permission-toggle.active::after {
-            left: 27px;
+        .approve-btn:hover {
+            opacity: 0.9;
         }
 
         .stock-list {
@@ -380,18 +412,37 @@
             <div class="section">
                 <h2 class="section-title">
                     <i class="fas fa-users-cog"></i>
-                    User Permissions
+                    User Management
                 </h2>
                 <input type="text" class="search-input" placeholder="Search users..." onkeyup="filterUsers(this.value)">
                 <div class="user-list">
-                    {% for user in users %}
-                    <div class="user-item" data-username="{{ user.username.lower() }}">
+                    {% for data in user_data %}
+                    <div class="user-item" data-username="{{ data.user.username.lower() }}">
+                        <img src="{{ data.user.twitch_profile_image }}" alt="{{ data.user.username }}" class="user-avatar">
                         <div class="user-info">
-                            <i class="fas fa-user"></i>
-                            {{ user.username }}
+                            <div class="username">{{ data.user.username }}</div>
+                            <div class="twitch-login">
+                                <i class="fab fa-twitch"></i> {{ data.user.twitch_login }}
+                            </div>
+                            <div class="portfolio-value">{{ data.formatted_value }}</div>
                         </div>
-                        <div class="permission-toggle {% if user.can_add_stocks %}active{% endif %}"
-                             onclick="togglePermission(this, {{ user.id }})">
+                        <div class="user-status">
+                            {% if not data.user.is_approved %}
+                                <span class="status-badge pending">Pending</span>
+                            {% endif %}
+                            {% if data.user.is_admin %}
+                                <span class="status-badge admin">Admin</span>
+                            {% endif %}
+                        </div>
+                        <div class="action-buttons">
+                            {% if data.user.id != current_user.id %}
+                                <button onclick="approveUser({{ data.user.id }})" class="approve-btn {% if data.user.is_approved %}unapprove{% endif %}">
+                                    {{ 'Unapprove' if data.user.is_approved else 'Approve' }}
+                                </button>
+                                <button onclick="toggleAdmin({{ data.user.id }})" class="toggle-btn">
+                                    {{ 'Remove Admin' if data.user.is_admin else 'Make Admin' }}
+                                </button>
+                            {% endif %}
                         </div>
                     </div>
                     {% endfor %}
@@ -409,17 +460,33 @@
             });
         }
 
-        function togglePermission(element, userId) {
-            fetch(`/admin/toggle_permission/${userId}`)
+        function approveUser(userId) {
+            fetch(`/admin/approve_user/${userId}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        element.classList.toggle('active');
-                        showNotification(data.message);
+                        location.reload();
+                    } else {
+                        showNotification(data.message, true);
                     }
                 })
                 .catch(error => {
-                    showNotification('Error updating permissions', true);
+                    showNotification('Error updating user approval status', true);
+                });
+        }
+
+        function toggleAdmin(userId) {
+            fetch(`/admin/toggle_admin/${userId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        showNotification(data.message, true);
+                    }
+                })
+                .catch(error => {
+                    showNotification('Error updating admin status', true);
                 });
         }
 

@@ -1,0 +1,570 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+<style>
+    :root {
+        --black: #000000;
+        --dark-gray: #111827;  /* Matches bg-gray-900 from Tailwind */
+        --gray: #1F2937;       /* Matches bg-gray-800 from Tailwind */
+        --light-gray: #374151; /* Matches bg-gray-700 from Tailwind */
+        --text: #ffffff;
+        --accent: #9CA3AF;     /* Matches text-gray-400 from Tailwind */
+        --purple: #9147ff;
+        --purple-dark: #772ce8;
+        --purple-light: #a970ff;
+    }
+
+    body {
+        background-color: var(--black);
+        color: var(--text);
+    }
+
+    .container {
+        background-color: var(--black);
+    }
+
+    .predictions-container {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+
+    .prediction-form {
+        background: var(--dark-gray);
+        padding: 1.5rem;
+        border-radius: 8px;
+        margin-bottom: 2rem;
+        border: 1px solid var(--gray);
+    }
+
+    .form-group {
+        margin-bottom: 1rem;
+    }
+
+    .form-label {
+        display: block;
+        color: var(--text);
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+    }
+
+    .form-input {
+        width: 100%;
+        padding: 0.75rem;
+        background: var(--gray);
+        border: 1px solid var(--light-gray);
+        border-radius: 4px;
+        color: var(--text);
+        margin-bottom: 0.5rem;
+    }
+
+    .form-input:focus {
+        outline: none;
+        border-color: var(--purple);
+    }
+
+    .options-container {
+        margin: 1rem 0;
+    }
+
+    .option-input {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .add-option-btn {
+        color: var(--purple-light);
+        background: none;
+        border: none;
+        padding: 0.5rem;
+        cursor: pointer;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .add-option-btn:hover {
+        color: var(--purple);
+    }
+
+    .remove-option {
+        background: none;
+        border: none;
+        color: #ff4444;
+        cursor: pointer;
+        padding: 0.5rem;
+    }
+
+    .submit-btn {
+        width: 100%;
+        padding: 0.75rem;
+        background: var(--purple);
+        color: var(--text);
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: background-color 0.2s;
+    }
+
+    .submit-btn:hover {
+        background: var(--purple-dark);
+    }
+
+    .predictions-section {
+        margin-bottom: 2rem;
+    }
+
+    .section-title {
+        color: var(--text);
+        font-size: 1.5rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid var(--purple);
+    }
+
+    .prediction-card {
+        background: var(--dark-gray);
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        border: 1px solid var(--gray);
+    }
+
+    .prediction-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 1rem;
+    }
+
+    .prediction-question {
+        color: var(--text);
+        font-size: 1.2rem;
+        font-weight: 500;
+        margin-right: 1rem;
+    }
+
+    .admin-controls {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .admin-btn {
+        background: none;
+        border: none;
+        padding: 0.5rem;
+        cursor: pointer;
+        font-size: 0.9rem;
+        border-radius: 4px;
+        transition: all 0.2s;
+    }
+
+    .resolve-btn {
+        color: #00cc00;
+    }
+
+    .resolve-btn:hover {
+        background: rgba(0, 204, 0, 0.1);
+    }
+
+    .delete-btn {
+        color: #ff4444;
+    }
+
+    .delete-btn:hover {
+        background: rgba(255, 68, 68, 0.1);
+    }
+
+    .option-button {
+        width: 100%;
+        text-align: left;
+        padding: 1rem;
+        margin-bottom: 0.5rem;
+        background: var(--gray);
+        border: 1px solid var(--light-gray);
+        border-radius: 4px;
+        color: var(--text);
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .option-button:disabled {
+        cursor: default;
+    }
+
+    .option-progress {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        background: var(--purple);
+        opacity: 0.2;
+        transition: width 0.3s ease;
+    }
+
+    .option-content {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        justify-content: space-between;
+    }
+
+    .option-text {
+        margin-right: 1rem;
+    }
+
+    .option-stats {
+        color: var(--accent);
+    }
+
+    .winner {
+        border: 2px solid #00cc00;
+    }
+
+    .countdown {
+        color: var(--accent);
+        font-size: 0.9rem;
+        margin-top: 1rem;
+    }
+
+    .past-prediction {
+        opacity: 0.8;
+    }
+
+    @media (max-width: 640px) {
+        .prediction-header {
+            flex-direction: column;
+        }
+        
+        .admin-controls {
+            margin-top: 1rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen">
+    <div class="container mx-auto px-4 py-8" style="max-width: 1200px;">
+        <!-- Admin Create Prediction Form -->
+        {% if user.is_admin %}
+        <div class="predictions-container">
+            <div class="prediction-form">
+                <h2 class="section-title">Create New Prediction</h2>
+                <form id="createPredictionForm">
+                    <div class="form-group">
+                        <label class="form-label">Question</label>
+                        <input type="text" id="question" class="form-input" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Options</label>
+                        <div id="optionsContainer" class="options-container">
+                            <div class="option-input">
+                                <input type="text" class="form-input option-field" required>
+                                <button type="button" class="remove-option">×</button>
+                            </div>
+                            <div class="option-input">
+                                <input type="text" class="form-input option-field" required>
+                                <button type="button" class="remove-option">×</button>
+                            </div>
+                        </div>
+                        <button type="button" id="addOption" class="add-option-btn">
+                            <i class="fas fa-plus-circle"></i> Add Option
+                        </button>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Duration (hours)</label>
+                        <input type="number" id="duration" class="form-input" value="24" min="1" required>
+                    </div>
+
+                    <button type="submit" class="submit-btn">Create Prediction</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Active Predictions -->
+        <div class="predictions-container">
+            <div class="predictions-section">
+                <h2 class="section-title">Active Predictions</h2>
+                {% for prediction in active_predictions %}
+                <div class="prediction-card" data-prediction-id="{{ prediction.id }}">
+                    <div class="prediction-header">
+                        <h3 class="prediction-question">{{ prediction.question }}</h3>
+                        {% if user.is_admin %}
+                        <div class="admin-controls">
+                            <button class="admin-btn resolve-btn" data-action="resolve" data-prediction-id="{{ prediction.id }}">
+                                <i class="fas fa-check-circle"></i> Resolve
+                            </button>
+                            <button class="admin-btn delete-btn" data-action="delete" data-prediction-id="{{ prediction.id }}">
+                                <i class="fas fa-trash"></i> Delete
+                            </button>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="options-list">
+                        {% for option in prediction_options[prediction.id] %}
+                        {% set voted = user_votes.get(prediction.id) == option.id %}
+                        {% set total_votes = prediction_options[prediction.id]|sum(attribute='votes_count') %}
+                        {% set percentage = (option.votes_count / total_votes * 100) if total_votes > 0 else 0 %}
+                        
+                        <button 
+                            class="option-button {% if voted %}voted{% endif %}"
+                            data-action="vote"
+                            data-prediction-id="{{ prediction.id }}"
+                            data-option-id="{{ option.id }}"
+                            {% if prediction.id in user_votes %}disabled{% endif %}
+                        >
+                            <div class="option-progress" data-width="{{ percentage }}"></div>
+                            <div class="option-content">
+                                <span class="option-text">{{ option.text }}</span>
+                                <span class="option-stats">{{ option.votes_count }} votes ({{ '%0.1f'|format(percentage) }}%)</span>
+                            </div>
+                        </button>
+                        {% endfor %}
+                    </div>
+
+                    <div class="countdown" data-ends-at="{{ prediction.ends_at }}">
+                        Time remaining: <span class="countdown-value"></span>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-gray-400">No active predictions</p>
+                {% endfor %}
+            </div>
+
+            <!-- Past Predictions -->
+            <div class="predictions-section">
+                <h2 class="section-title">Past Predictions</h2>
+                {% for prediction in past_predictions %}
+                <div class="prediction-card past-prediction">
+                    <div class="prediction-header">
+                        <h3 class="prediction-question">{{ prediction.question }}</h3>
+                    </div>
+
+                    <div class="options-list">
+                        {% for option in prediction_options[prediction.id] %}
+                        {% set is_winner = prediction.winning_option == option.id %}
+                        {% set total_votes = prediction_options[prediction.id]|sum(attribute='votes_count') %}
+                        {% set percentage = (option.votes_count / total_votes * 100) if total_votes > 0 else 0 %}
+                        
+                        <div class="option-button {% if is_winner %}winner{% endif %}" data-disabled="true">
+                            <div class="option-progress" data-width="{{ percentage }}"></div>
+                            <div class="option-content">
+                                <span class="option-text">
+                                    {{ option.text }}
+                                    {% if is_winner %}<i class="fas fa-crown" style="color: gold; margin-left: 0.5rem;"></i>{% endif %}
+                                </span>
+                                <span class="option-stats">{{ option.votes_count }} votes ({{ '%0.1f'|format(percentage) }}%)</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="countdown">
+                        Ended: {{ prediction.ends_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-gray-400">No past predictions</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Event delegation for all button clicks
+    document.addEventListener('click', function(e) {
+        const target = e.target.closest('[data-action]');
+        if (!target) return;
+
+        const action = target.dataset.action;
+        const predictionId = target.dataset.predictionId;
+        const optionId = target.dataset.optionId;
+
+        switch(action) {
+            case 'vote':
+                handleVote(predictionId, optionId);
+                break;
+            case 'resolve':
+                handleResolve(predictionId);
+                break;
+            case 'delete':
+                handleDelete(predictionId);
+                break;
+        }
+    });
+
+    // Update this section to directly set width style
+    document.querySelectorAll('.option-progress').forEach(el => {
+        const width = el.getAttribute('data-width');
+        el.style.width = `${width}%`;
+    });
+
+    // Create Prediction Form
+    const createPredictionForm = document.getElementById('createPredictionForm');
+    const addOptionBtn = document.getElementById('addOption');
+    const optionsContainer = document.getElementById('optionsContainer');
+
+    if (createPredictionForm) {
+        createPredictionForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const question = document.getElementById('question').value;
+            const options = Array.from(document.getElementsByClassName('option-field')).map(input => input.value);
+            const duration = document.getElementById('duration').value;
+
+            try {
+                const response = await fetch('/admin/create_prediction', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        question,
+                        options,
+                        duration_hours: duration
+                    })
+                });
+                
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    const data = await response.json();
+                    alert(data.error || 'Failed to create prediction');
+                }
+            } catch (error) {
+                alert('Failed to create prediction');
+            }
+        });
+    }
+
+    // Add/Remove Options
+    if (addOptionBtn) {
+        addOptionBtn.addEventListener('click', () => {
+            const newOption = document.createElement('div');
+            newOption.className = 'option-input';
+            newOption.innerHTML = `
+                <input type="text" class="form-input option-field" required>
+                <button type="button" class="remove-option">×</button>
+            `;
+            optionsContainer.appendChild(newOption);
+        });
+
+        optionsContainer.addEventListener('click', (e) => {
+            if (e.target.classList.contains('remove-option')) {
+                if (optionsContainer.children.length > 2) {
+                    e.target.parentElement.remove();
+                }
+            }
+        });
+    }
+
+    // Rest of your existing JavaScript...
+    // (Keep all the existing JavaScript functions but rename them to handle*)
+    async function handleVote(predictionId, optionId) {
+        try {
+            const response = await fetch('/vote', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    prediction_id: predictionId,
+                    option_id: optionId
+                })
+            });
+            
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                const data = await response.json();
+                alert(data.error || 'Failed to vote');
+            }
+        } catch (error) {
+            alert('Failed to vote');
+        }
+    }
+
+    async function handleResolve(predictionId) {
+        const winningOption = prompt('Enter the ID of the winning option:');
+        if (!winningOption) return;
+
+        try {
+            const response = await fetch('/admin/resolve_prediction', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    prediction_id: predictionId,
+                    winning_option_id: parseInt(winningOption)
+                })
+            });
+            
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                const data = await response.json();
+                alert(data.error || 'Failed to resolve prediction');
+            }
+        } catch (error) {
+            alert('Failed to resolve prediction');
+        }
+    }
+
+    async function handleDelete(predictionId) {
+        if (!confirm('Are you sure you want to delete this prediction?')) return;
+
+        try {
+            const response = await fetch(`/admin/delete_prediction/${predictionId}`, {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                const data = await response.json();
+                alert(data.error || 'Failed to delete prediction');
+            }
+        } catch (error) {
+            alert('Failed to delete prediction');
+        }
+    }
+
+    // Countdown Timer
+    function updateCountdowns() {
+        document.querySelectorAll('.countdown-value').forEach(el => {
+            const endsAt = new Date(el.closest('.countdown').dataset.endsAt);
+            const now = new Date();
+            const diff = endsAt - now;
+
+            if (diff <= 0) {
+                el.textContent = 'Ended';
+                return;
+            }
+
+            const hours = Math.floor(diff / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+            el.textContent = `${hours}h ${minutes}m ${seconds}s`;
+        });
+    }
+
+    setInterval(updateCountdowns, 1000);
+    updateCountdowns();
+});
+</script>
+{% endblock %} 
