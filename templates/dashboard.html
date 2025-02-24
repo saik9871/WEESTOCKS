@@ -971,6 +971,7 @@
                         </td>
                         <td onclick="event.stopPropagation();">
                             <div class="trade-actions">
+                                <label for="qty-{{ stock.symbol }}" class="sr-only">Quantity</label>
                                 <input type="number" 
                                        class="qty-input" 
                                        placeholder="Qty"
@@ -978,7 +979,7 @@
                                        id="qty-{{ stock.symbol }}"
                                        onkeypress="return event.charCode >= 48 && event.charCode <= 57">
                                 <div class="action-buttons">
-                                    <button onclick="handleTrade('{{ stock.symbol }}', {{ stock.price }}, 'buy', {{ positions.get(stock.id, {'shares': 0}).shares }})" class="btn-buy">
+                                    <button onclick="handleTrade('{{ stock.symbol }}', {{ stock.price }}, 'buy')" class="btn-buy">
                                         Buy
                                     </button>
                                     {% if positions.get(stock.id, {'shares': 0}).shares > 0 %}
