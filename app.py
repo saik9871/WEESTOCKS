@@ -26,6 +26,13 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access to ses
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=31)
 
+# Railway specific configurations
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_size': 10,
+    'pool_recycle': 60,
+    'pool_pre_ping': True
+}
+
 # Use DATABASE_URL from environment variables, fallback to SQLite for local development
 database_url = os.getenv('DATABASE_URL', 'postgresql://neondb_owner:npg_G9shViASrx8J@ep-late-unit-a80vzjan-pooler.eastus2.azure.neon.tech/neondb?sslmode=require')
 if database_url.startswith("postgres://"):
@@ -1063,17 +1070,11 @@ def update_stock_prices():
     except Exception as e:
         print(f"Error in update_stock_prices: {str(e)}")
 
-def shutdown_scheduler(scheduler):
-    try:
-        if scheduler and scheduler.running:
-            scheduler.shutdown(wait=True)
-    except Exception as e:
-        print(f"Error shutting down scheduler: {str(e)}")
-
 def create_scheduler():
     """Create and configure the scheduler with proper error handling"""
     try:
         scheduler = BackgroundScheduler(
+            daemon=True,  # Run as daemon thread
             job_defaults={
                 'coalesce': True,
                 'max_instances': 1,
@@ -1083,10 +1084,18 @@ def create_scheduler():
         scheduler.add_job(
             func=update_stock_prices,
             trigger="interval",
-            seconds=45
+            seconds=45,
+            max_instances=1
         )
         
-        atexit.register(lambda: shutdown_scheduler(scheduler))
+        def cleanup():
+            try:
+                if scheduler.running:
+                    scheduler.shutdown(wait=False)
+            except:
+                pass
+                
+        atexit.register(cleanup)
         
         scheduler.start()
         return scheduler
@@ -1094,10 +1103,21 @@ def create_scheduler():
         print(f"Error creating scheduler: {str(e)}")
         return None
 
-# Initialize scheduler only once
+# Initialize scheduler only in a web process
 scheduler = None
-if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+if os.environ.get('RAILWAY_ENVIRONMENT') == 'production':
+    if not os.environ.get('DYNO') or not os.environ.get('DYNO').startswith('web'):
+        scheduler = None
+    else:
+        scheduler = create_scheduler()
+elif not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
     scheduler = create_scheduler()
 
+# Add health check endpoint for Railway
+@app.route('/health')
+def health_check():
+    return jsonify({'status': 'healthy'}), 200
+
 if __name__ == '__main__':
-    app.run(debug=True) 
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port) 
