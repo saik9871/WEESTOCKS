@@ -1019,6 +1019,18 @@
         }
     }
 
+    function showNotification(message, type = 'success') {
+        const notification = document.createElement('div');
+        notification.className = `flash ${type}`;
+        notification.textContent = message;
+        document.body.appendChild(notification);
+
+        // Remove notification after 3 seconds
+        setTimeout(() => {
+            notification.remove();
+        }, 3000);
+    }
+
     function executeBuyOrder(symbol, price, quantity) {
         const formData = new FormData();
         formData.append('symbol', symbol);
@@ -1031,14 +1043,15 @@
         })
         .then(response => {
             if (response.ok) {
+                showNotification(`Successfully bought ${quantity} shares of ${symbol}`);
                 location.reload();
             } else {
-                alert('Failed to execute buy order. Please try again.');
+                showNotification('Failed to execute buy order. Please try again.', 'error');
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Failed to execute buy order. Please try again.');
+            showNotification('Failed to execute buy order. Please try again.', 'error');
         });
     }
 
@@ -1054,14 +1067,15 @@
         })
         .then(response => {
             if (response.ok) {
+                showNotification(`Successfully sold ${quantity} shares of ${symbol}`);
                 location.reload();
             } else {
-                alert('Failed to execute sell order. Please try again.');
+                showNotification('Failed to execute sell order. Please try again.', 'error');
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Failed to execute sell order. Please try again.');
+            showNotification('Failed to execute sell order. Please try again.', 'error');
         });
     }
 
