@@ -13,7 +13,10 @@ import secrets
 import random
 from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
-from sqlalchemy import exc, inspect, text
+from sqlalchemy import exc, inspect, text, create_engine
+from sqlalchemy.pool import QueuePool
+from flask_caching import Cache
+import redis
 
 # Load environment variables
 load_dotenv()
@@ -26,11 +29,14 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access to ses
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=31)
 
-# Railway specific configurations
+# Enhanced database configuration
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'pool_size': 10,
-    'pool_recycle': 60,
-    'pool_pre_ping': True
+    'pool_size': 20,  # Increased from 10
+    'max_overflow': 30,  # Allow up to 30 additional connections
+    'pool_recycle': 1800,  # Recycle connections after 30 minutes
+    'pool_pre_ping': True,  # Check connection validity before using
+    'pool_timeout': 30,  # Wait up to 30 seconds for available connection
+    'poolclass': QueuePool
 }
 
 # Use DATABASE_URL from environment variables, fallback to SQLite for local development
@@ -47,7 +53,44 @@ TWITCH_CLIENT_ID = 'shdewm91zxskpkg12fi3hphsfsajlc'
 TWITCH_CLIENT_SECRET = 'q4kuhmknmf7i56mxwz4tfkkad18av3'
 TWITCH_REDIRECT_URI = 'https://weenstock.up.railway.app/auth/twitch/callback'  # Updated to production URL
 
+# Create engine with optimized settings
+engine = create_engine(
+    database_url,
+    poolclass=QueuePool,
+    pool_size=20,
+    max_overflow=30,
+    pool_recycle=1800,
+    pool_pre_ping=True,
+    pool_timeout=30
+)
+
 db = SQLAlchemy(app)
+db.engine = engine
+
+# Redis configuration
+redis_client = redis.Redis(
+    host=os.getenv('REDIS_HOST', 'localhost'),
+    port=int(os.getenv('REDIS_PORT', 6379)),
+    db=0,
+    decode_responses=True
+)
+
+# Cache configuration
+cache = Cache(app, config={
+    'CACHE_TYPE': 'redis',
+    'CACHE_REDIS_HOST': os.getenv('REDIS_HOST', 'localhost'),
+    'CACHE_REDIS_PORT': int(os.getenv('REDIS_PORT', 6379)),
+    'CACHE_DEFAULT_TIMEOUT': 300
+})
+
+# Cache key prefixes
+CACHE_KEYS = {
+    'user_portfolio': 'portfolio_{}',
+    'stock_price': 'stock_price_{}',
+    'prediction_data': 'prediction_{}',
+    'active_predictions': 'active_predictions',
+    'user_bets': 'user_bets_{}'
+}
 
 # Models
 class User(db.Model):
@@ -127,27 +170,39 @@ class Prediction(db.Model):
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     ends_at = db.Column(db.DateTime, nullable=False)
-    is_active = db.Column(db.Boolean, default=True)
-    is_resolved = db.Column(db.Boolean, default=False)
-    winning_option = db.Column(db.Integer, nullable=True)  # ID of the winning option
-    total_pool = db.Column(db.Float, nullable=False, default=0.0)  # Total amount bet on all options
+    is_active = db.Column(db.Boolean, default=True, index=True)
+    is_resolved = db.Column(db.Boolean, default=False, index=True)
+    winning_option = db.Column(db.Integer, nullable=True)
+    total_pool = db.Column(db.Float, nullable=False, default=0.0)
+
+    # Add relationship for eager loading
+    options = db.relationship('PredictionOption', backref='prediction', lazy='joined')
+    votes = db.relationship('Vote', backref='prediction', lazy='select')
+    bets = db.relationship('Bet', backref='prediction', lazy='select')
+
+    __table_args__ = (
+        db.Index('idx_active_created', is_active, created_at.desc()),
+        db.Index('idx_resolved_created', is_resolved, created_at.desc())
+    )
 
 class PredictionOption(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    prediction_id = db.Column(db.Integer, db.ForeignKey('prediction.id'), nullable=False)
+    prediction_id = db.Column(db.Integer, db.ForeignKey('prediction.id'), nullable=False, index=True)
     text = db.Column(db.String(100), nullable=False)
     votes_count = db.Column(db.Integer, default=0)
-    total_bet_amount = db.Column(db.Float, nullable=False, default=0.0)  # Total amount bet on this option
+    total_bet_amount = db.Column(db.Float, nullable=False, default=0.0)
 
 class Vote(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    prediction_id = db.Column(db.Integer, db.ForeignKey('prediction.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    prediction_id = db.Column(db.Integer, db.ForeignKey('prediction.id'), nullable=False, index=True)
     option_id = db.Column(db.Integer, db.ForeignKey('prediction_option.id'), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
-    # Ensure users can only vote once per prediction
-    __table_args__ = (db.UniqueConstraint('user_id', 'prediction_id', name='unique_user_prediction_vote'),)
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'prediction_id', name='unique_user_prediction_vote'),
+        db.Index('idx_vote_user_prediction', user_id, prediction_id)
+    )
 
 class Comment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -164,16 +219,18 @@ class Comment(db.Model):
 
 class Bet(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    prediction_id = db.Column(db.Integer, db.ForeignKey('prediction.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    prediction_id = db.Column(db.Integer, db.ForeignKey('prediction.id'), nullable=False, index=True)
     option_id = db.Column(db.Integer, db.ForeignKey('prediction_option.id'), nullable=False)
     amount = db.Column(db.Float, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    is_settled = db.Column(db.Boolean, default=False)
-    winnings = db.Column(db.Float, nullable=True)  # Amount won (null if not settled or lost)
+    is_settled = db.Column(db.Boolean, default=False, index=True)
+    winnings = db.Column(db.Float, nullable=True)
 
-    # Ensure users can only bet once per prediction
-    __table_args__ = (db.UniqueConstraint('user_id', 'prediction_id', name='unique_user_prediction_bet'),)
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'prediction_id', name='unique_user_prediction_bet'),
+        db.Index('idx_bet_user_prediction', user_id, prediction_id)
+    )
 
 def add_column(engine, table_name, column):
     column_name = column.compile(dialect=engine.dialect)
@@ -202,7 +259,6 @@ with app.app_context():
         
         # Check if columns exist and add them if they don't
         existing_columns = [column['name'] for column in inspector.get_columns('stock')]
-        
         if 'last_viewed' not in existing_columns:
             db.session.execute(text('ALTER TABLE stock ADD COLUMN IF NOT EXISTS last_viewed TIMESTAMP'))
         if 'view_count' not in existing_columns:
@@ -812,6 +868,7 @@ def make_first_user_admin():
     return redirect(url_for('dashboard'))
 
 @app.route('/predictions')
+@cache.cached(timeout=30, key_prefix='predictions_view')
 def predictions():
     if 'user_id' not in session:
         return redirect(url_for('login'))
@@ -822,38 +879,44 @@ def predictions():
             print("User not found in predictions route")
             return redirect(url_for('login'))
 
-        # Get active and past predictions
-        active_predictions = Prediction.query.filter_by(is_active=True).order_by(Prediction.created_at.desc()).all()
-        print(f"Found {len(active_predictions)} active predictions")
-        
-        past_predictions = Prediction.query.filter_by(is_active=False).order_by(Prediction.created_at.desc()).limit(10).all()
-        print(f"Found {len(past_predictions)} past predictions")
+        # Try to get active predictions from cache
+        active_predictions = cache.get(CACHE_KEYS['active_predictions'])
+        if active_predictions is None:
+            active_predictions = (Prediction.query
+                .filter_by(is_active=True)
+                .options(db.joinedload(Prediction.options))
+                .order_by(Prediction.created_at.desc())
+                .all())
+            cache.set(CACHE_KEYS['active_predictions'], active_predictions, timeout=30)
 
-        # Get all options for each prediction
-        prediction_options = {}
-        for prediction in active_predictions + past_predictions:
-            options = PredictionOption.query.filter_by(prediction_id=prediction.id).all()
-            prediction_options[prediction.id] = options
-            print(f"Found {len(options)} options for prediction {prediction.id}")
+        past_predictions = (Prediction.query
+            .filter_by(is_active=False)
+            .options(db.joinedload(Prediction.options))
+            .order_by(Prediction.created_at.desc())
+            .limit(10)
+            .all())
 
-        # Get user's votes
-        user_votes = {}
-        votes = Vote.query.filter_by(user_id=user.id).all()
-        for vote in votes:
-            user_votes[vote.prediction_id] = vote.option_id
-        print(f"Found {len(votes)} votes for user")
-
-        # Get user's bets
-        user_bets = {}
-        bets = Bet.query.filter_by(user_id=user.id).all()
-        for bet in bets:
-            user_bets[bet.prediction_id] = {
+        # Get user's bets from cache
+        cache_key = CACHE_KEYS['user_bets'].format(user.id)
+        user_bets = cache.get(cache_key)
+        if user_bets is None:
+            bets = Bet.query.filter_by(user_id=user.id).all()
+            user_bets = {bet.prediction_id: {
                 'option_id': bet.option_id,
                 'amount': bet.amount,
                 'is_settled': bet.is_settled,
                 'winnings': bet.winnings
-            }
-        print(f"Found {len(bets)} bets for user")
+            } for bet in bets}
+            cache.set(cache_key, user_bets, timeout=60)
+
+        # Get user's votes efficiently
+        user_votes = {vote.prediction_id: vote.option_id for vote in 
+            Vote.query.filter_by(user_id=user.id).all()}
+
+        # Organize options by prediction_id
+        prediction_options = {}
+        for pred in active_predictions + past_predictions:
+            prediction_options[pred.id] = pred.options
 
         return render_template('predictions.html',
             user=user,
@@ -959,36 +1022,49 @@ def place_bet():
     option_id = data.get('option_id')
     amount = float(data.get('amount', 0))
 
-    if not all([prediction_id, option_id, amount]):
-        return jsonify({'error': 'Missing required fields'}), 400
+    if not all([prediction_id, option_id, amount]) or amount <= 0:
+        return jsonify({'error': 'Invalid bet parameters'}), 400
 
-    if amount <= 0:
-        return jsonify({'error': 'Bet amount must be greater than 0'}), 400
-
-    user = User.query.get(session['user_id'])
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-
-    if user.cash < amount:
-        return jsonify({'error': 'Insufficient funds'}), 400
-
-    prediction = Prediction.query.get(prediction_id)
-    if not prediction:
-        return jsonify({'error': 'Prediction not found'}), 404
-
-    if not prediction.is_active or prediction.is_resolved:
-        return jsonify({'error': 'This prediction is no longer accepting bets'}), 400
-
-    if datetime.utcnow() >= prediction.ends_at:
-        return jsonify({'error': 'Betting period has ended'}), 400
-
-    option = PredictionOption.query.get(option_id)
-    if not option or option.prediction_id != prediction_id:
-        return jsonify({'error': 'Invalid option'}), 400
-
+    # Use Redis for distributed locking to prevent race conditions
+    lock_key = f"bet_lock_{prediction_id}_{session['user_id']}"
+    lock = redis_client.lock(lock_key, timeout=5)  # 5-second timeout
+    
     try:
-        # Check if user has already bet on this prediction
-        existing_bet = Bet.query.filter_by(
+        have_lock = lock.acquire(blocking=True, blocking_timeout=2)
+        if not have_lock:
+            return jsonify({'error': 'Transaction in progress, please try again'}), 429
+
+        # Rest of the existing bet placement logic...
+        prediction_data = db.session.query(
+            Prediction,
+            PredictionOption,
+            User
+        ).join(
+            PredictionOption, PredictionOption.prediction_id == Prediction.id
+        ).join(
+            User, User.id == session['user_id']
+        ).filter(
+            Prediction.id == prediction_id,
+            PredictionOption.id == option_id,
+            User.id == session['user_id']
+        ).first()
+
+        if not prediction_data:
+            return jsonify({'error': 'Invalid prediction or option'}), 404
+
+        prediction, option, user = prediction_data
+
+        # Validate bet conditions...
+        if not prediction.is_active or prediction.is_resolved:
+            return jsonify({'error': 'This prediction is no longer accepting bets'}), 400
+
+        if datetime.utcnow() >= prediction.ends_at:
+            return jsonify({'error': 'Betting period has ended'}), 400
+
+        if user.cash < amount:
+            return jsonify({'error': 'Insufficient funds'}), 400
+
+        existing_bet = db.session.query(Bet.id).filter_by(
             user_id=user.id,
             prediction_id=prediction_id
         ).first()
@@ -996,7 +1072,6 @@ def place_bet():
         if existing_bet:
             return jsonify({'error': 'You have already placed a bet on this prediction'}), 400
 
-        # Create new bet
         bet = Bet(
             user_id=user.id,
             prediction_id=prediction_id,
@@ -1004,15 +1079,16 @@ def place_bet():
             amount=amount
         )
 
-        # Update user's cash balance
         user.cash -= amount
-
-        # Update prediction and option totals
         prediction.total_pool += amount
         option.total_bet_amount += amount
 
         db.session.add(bet)
         db.session.commit()
+
+        # Invalidate relevant caches
+        invalidate_user_cache(user.id)
+        invalidate_prediction_cache(prediction_id)
 
         return jsonify({
             'message': 'Bet placed successfully',
@@ -1022,6 +1098,9 @@ def place_bet():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+    finally:
+        if 'lock' in locals() and have_lock:
+            lock.release()
 
 @app.route('/admin/resolve_prediction', methods=['POST'])
 @admin_required
@@ -1033,54 +1112,96 @@ def resolve_prediction():
     if not all([prediction_id, winning_option_id]):
         return jsonify({'error': 'Missing required fields'}), 400
 
-    prediction = Prediction.query.get(prediction_id)
-    if not prediction:
-        return jsonify({'error': 'Prediction not found'}), 404
-
-    if prediction.is_resolved:
-        return jsonify({'error': 'Prediction is already resolved'}), 400
-
-    winning_option = PredictionOption.query.get(winning_option_id)
-    if not winning_option or winning_option.prediction_id != prediction_id:
-        return jsonify({'error': 'Invalid winning option'}), 400
+    # Use Redis for distributed locking
+    lock_key = f"resolve_prediction_{prediction_id}"
+    lock = redis_client.lock(lock_key, timeout=10)
 
     try:
-        # Calculate and distribute winnings
+        have_lock = lock.acquire(blocking=True, blocking_timeout=5)
+        if not have_lock:
+            return jsonify({'error': 'Resolution in progress, please try again'}), 429
+
+        # Get prediction and winning option in a single query with FOR UPDATE lock
+        prediction_data = db.session.query(
+            Prediction,
+            PredictionOption
+        ).join(
+            PredictionOption, PredictionOption.id == winning_option_id
+        ).filter(
+            Prediction.id == prediction_id,
+            PredictionOption.prediction_id == prediction_id
+        ).with_for_update().first()
+
+        if not prediction_data:
+            return jsonify({'error': 'Invalid prediction or winning option'}), 404
+
+        prediction, winning_option = prediction_data
+
+        if prediction.is_resolved:
+            return jsonify({'error': 'Prediction is already resolved'}), 400
+
+        # Calculate winnings in a single query
         total_pool = prediction.total_pool
         winning_pool = winning_option.total_bet_amount
 
         if winning_pool > 0:
-            # Get all winning bets
-            winning_bets = Bet.query.filter_by(
-                prediction_id=prediction_id,
-                option_id=winning_option_id
-            ).all()
-
-            # Calculate the profit pool (90% of losing bets)
+            # Calculate profit pool
             losing_pool = total_pool - winning_pool
             profit_pool = losing_pool * 0.9  # 10% house fee
 
-            for bet in winning_bets:
-                # Calculate this bet's share of the profit pool
+            # Prepare bulk updates for winning bets and user balances
+            winning_bets_data = db.session.query(
+                Bet,
+                User
+            ).join(
+                User, User.id == Bet.user_id
+            ).filter(
+                Bet.prediction_id == prediction_id,
+                Bet.option_id == winning_option_id
+            ).with_for_update().all()
+
+            # Prepare bulk updates
+            bet_updates = []
+            user_updates = []
+
+            for bet, user in winning_bets_data:
                 share = bet.amount / winning_pool
                 winnings = bet.amount + (profit_pool * share)
                 
-                # Update bet record
-                bet.is_settled = True
-                bet.winnings = winnings
+                bet_updates.append({
+                    'id': bet.id,
+                    'is_settled': True,
+                    'winnings': winnings
+                })
                 
-                # Update user's cash balance
-                user = User.query.get(bet.user_id)
-                user.cash += winnings
+                user_updates.append({
+                    'id': user.id,
+                    'cash_increment': winnings
+                })
 
-        # Mark all losing bets as settled
-        Bet.query.filter(
+            # Execute bulk updates
+            if bet_updates:
+                db.session.bulk_update_mappings(Bet, bet_updates)
+            
+            if user_updates:
+                # Update user balances using raw SQL for better performance
+                update_users_sql = """
+                    UPDATE "user" 
+                    SET cash = cash + tmp.cash_increment 
+                    FROM (VALUES %s) AS tmp(id, cash_increment) 
+                    WHERE "user".id = tmp.id
+                """
+                values = [(u['id'], u['cash_increment']) for u in user_updates]
+                db.session.execute(update_users_sql, values)
+
+        # Update losing bets in bulk
+        db.session.query(Bet).filter(
             Bet.prediction_id == prediction_id,
             Bet.option_id != winning_option_id
         ).update({
             'is_settled': True,
             'winnings': 0
-        })
+        }, synchronize_session=False)
 
         # Update prediction
         prediction.is_resolved = True
@@ -1088,11 +1209,20 @@ def resolve_prediction():
         prediction.winning_option = winning_option_id
 
         db.session.commit()
+
+        # Invalidate relevant caches
+        invalidate_prediction_cache(prediction_id)
+        for bet, user in winning_bets_data:
+            invalidate_user_cache(user.id)
+
         return jsonify({'message': 'Prediction resolved successfully'})
 
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+    finally:
+        if 'lock' in locals() and have_lock:
+            lock.release()
 
 @app.route('/admin/delete_prediction/<int:prediction_id>', methods=['POST'])
 @admin_required
@@ -1296,6 +1426,47 @@ elif not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
 @app.route('/health')
 def health_check():
     return jsonify({'status': 'healthy'}), 200
+
+def invalidate_user_cache(user_id):
+    """Invalidate all cached data for a user"""
+    cache.delete(CACHE_KEYS['user_portfolio'].format(user_id))
+    cache.delete(CACHE_KEYS['user_bets'].format(user_id))
+
+def invalidate_prediction_cache(prediction_id):
+    """Invalidate prediction-related caches"""
+    cache.delete(CACHE_KEYS['prediction_data'].format(prediction_id))
+    cache.delete(CACHE_KEYS['active_predictions'])
+
+# Add database session middleware
+@app.before_request
+def before_request():
+    g.db = db.session()
+
+@app.teardown_request
+def teardown_request(exception=None):
+    if hasattr(g, 'db'):
+        g.db.close()
+
+# Add database health check
+def check_db_connection():
+    try:
+        db.session.execute('SELECT 1')
+        return True
+    except Exception as e:
+        print(f"Database connection error: {str(e)}")
+        return False
+
+# Periodic database connection check
+def periodic_db_check():
+    if not check_db_connection():
+        db.session.remove()
+        db.engine.dispose()
+
+scheduler.add_job(
+    func=periodic_db_check,
+    trigger="interval",
+    minutes=5
+)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
