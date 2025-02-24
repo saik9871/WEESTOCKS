@@ -12,13 +12,19 @@ from requests_oauthlib import OAuth2Session
 import secrets
 import random
 from apscheduler.schedulers.background import BackgroundScheduler
-from sqlalchemy import func, desc
 import atexit
+from sqlalchemy import exc
 
 # Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
+
+# Enhanced session security
+app.config['SESSION_COOKIE_SECURE'] = True  # Only send cookies over HTTPS
+app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access to session cookie
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=31)
 
 # Use DATABASE_URL from environment variables, fallback to SQLite for local development
 database_url = os.getenv('DATABASE_URL', 'postgresql://neondb_owner:npg_G9shViASrx8J@ep-late-unit-a80vzjan-pooler.eastus2.azure.neon.tech/neondb?sslmode=require')
@@ -28,7 +34,6 @@ if database_url.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-here')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=31)  # Session lasts for 31 days
 
 # Twitch OAuth Configuration
 TWITCH_CLIENT_ID = 'shdewm91zxskpkg12fi3hphsfsajlc'
@@ -73,7 +78,6 @@ class Stock(db.Model):
     last_viewed = db.Column(db.DateTime, nullable=True)  # Track when stock was last viewed
     view_count = db.Column(db.Integer, default=0)  # Track number of views
     trade_count = db.Column(db.Integer, default=0)  # Track number of trades
-    comment_count = db.Column(db.Integer, default=0)  # Track number of comments
 
     def get_day_change(self):
         if self.previous_close == 0:
@@ -92,15 +96,13 @@ class Stock(db.Model):
             hours_since_view = (datetime.utcnow() - self.last_viewed).total_seconds() / 3600
             time_factor = max(0.1, 1.0 / (1 + hours_since_view))  # Decay over time
 
-        # Combine various factors with weights
-        view_weight = 0.3
-        trade_weight = 0.5
-        comment_weight = 0.2
+        # Combine views and trades with weights
+        view_weight = 0.4  # Increased from 0.3
+        trade_weight = 0.6  # Increased from 0.5
 
         interest_score = (
             (self.view_count * view_weight) +
-            (self.trade_count * trade_weight) +
-            (self.comment_count * comment_weight)
+            (self.trade_count * trade_weight)
         ) * time_factor
 
         return interest_score
@@ -466,81 +468,95 @@ def logout():
 @app.route('/trade', methods=['POST'])
 def trade():
     if 'user_id' not in session:
-        return redirect(url_for('login'))
+        return jsonify({'error': 'Unauthorized'}), 401
     
     data = request.form
-    stock = Stock.query.filter_by(symbol=data['symbol']).first()
-    user = User.query.get(session['user_id'])
-    quantity = int(data['quantity'])
-    action = data['action']
-    
-    if not stock or not user:
-        flash('Invalid stock or user', 'error')
-        return redirect(url_for('dashboard'))
-    
-    position = Position.query.filter_by(user_id=user.id, stock_id=stock.id).first()
-    if not position:
-        position = Position(user_id=user.id, stock_id=stock.id, shares=0)
-        db.session.add(position)
     
     try:
+        # Input validation
+        if not all(k in data for k in ['symbol', 'quantity', 'action']):
+            return jsonify({'error': 'Missing required fields'}), 400
+            
+        try:
+            quantity = int(data['quantity'])
+            if quantity <= 0:
+                return jsonify({'error': 'Quantity must be positive'}), 400
+        except ValueError:
+            return jsonify({'error': 'Invalid quantity'}), 400
+            
+        if data['action'] not in ['buy', 'sell']:
+            return jsonify({'error': 'Invalid action'}), 400
+        
+        # Get stock and user with row locking to prevent race conditions
+        stock = Stock.query.with_for_update().filter_by(symbol=data['symbol']).first()
+        if not stock:
+            return jsonify({'error': 'Stock not found'}), 404
+            
+        user = User.query.with_for_update().get(session['user_id'])
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        position = Position.query.with_for_update().filter_by(
+            user_id=user.id, 
+            stock_id=stock.id
+        ).first()
+        
+        if not position:
+            position = Position(user_id=user.id, stock_id=stock.id, shares=0)
+            db.session.add(position)
+        
         old_price = stock.price
-        if action == 'buy':
+        
+        if data['action'] == 'buy':
             cost = stock.price * quantity
             if user.cash < cost:
-                flash('Insufficient funds', 'error')
-                return redirect(url_for('dashboard'))
+                return jsonify({'error': 'Insufficient funds'}), 400
             if stock.shares_held + quantity > stock.total_shares:
-                flash('Not enough shares available', 'error')
-                return redirect(url_for('dashboard'))
+                return jsonify({'error': 'Not enough shares available'}), 400
                 
             user.cash -= cost
             position.shares += quantity
             stock.shares_held += quantity
             stock.price = calculate_new_price(stock.price, quantity, True)
-            stock.trade_count += 1  # Increment trade count
+            stock.trade_count += 1
             
-            # Record trade history
-            price_change = ((stock.price - old_price) / old_price) * 100
-            history = StockHistory(
-                stock_id=stock.id,
-                price=stock.price,
-                price_change=price_change,
-                volume=quantity
-            )
-            db.session.add(history)
-            
-            flash(f'Successfully bought {quantity} shares of {stock.symbol}', 'success')
-            
-        elif action == 'sell':
+        elif data['action'] == 'sell':
             if position.shares < quantity:
-                flash('Not enough shares to sell', 'error')
-                return redirect(url_for('dashboard'))
+                return jsonify({'error': 'Not enough shares to sell'}), 400
                 
             proceeds = stock.price * quantity
             user.cash += proceeds
             position.shares -= quantity
             stock.shares_held -= quantity
             stock.price = calculate_new_price(stock.price, quantity, False)
-            stock.trade_count += 1  # Increment trade count
-            
-            # Record trade history
-            price_change = ((stock.price - old_price) / old_price) * 100
-            history = StockHistory(
-                stock_id=stock.id,
-                price=stock.price,
-                price_change=price_change,
-                volume=quantity
-            )
-            db.session.add(history)
-            
-            flash(f'Successfully sold {quantity} shares of {stock.symbol}', 'success')
+            stock.trade_count += 1
         
-        db.session.commit()
+        # Record trade history
+        price_change = ((stock.price - old_price) / old_price) * 100
+        history = StockHistory(
+            stock_id=stock.id,
+            price=stock.price,
+            price_change=price_change,
+            volume=quantity
+        )
+        db.session.add(history)
+        
+        try:
+            db.session.commit()
+            return jsonify({
+                'success': True,
+                'message': f'Successfully {"bought" if data["action"] == "buy" else "sold"} {quantity} shares of {stock.symbol}',
+                'new_balance': user.cash,
+                'new_shares': position.shares,
+                'new_price': stock.price
+            })
+        except exc.IntegrityError:
+            db.session.rollback()
+            return jsonify({'error': 'Transaction failed, please try again'}), 500
+            
     except Exception as e:
-        flash('An error occurred during the trade', 'error')
-        
-    return redirect(url_for('dashboard'))
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/portfolio')
 def portfolio():
@@ -1002,42 +1018,37 @@ def update_stock_prices():
     """Background task to update stock prices based on user interest"""
     try:
         with app.app_context():
-            stocks = Stock.query.all()
+            stocks = Stock.query.with_for_update().all()  # Add row locking
             for stock in stocks:
                 try:
                     interest_score = stock.calculate_interest_score()
+                    base_volatility = random.uniform(0.002, 0.015)
+                    volatility = base_volatility * (1 + min(1.5, interest_score / 10))
                     
-                    # Base volatility (0.5% to 2%)
-                    base_volatility = random.uniform(0.005, 0.02)
-                    
-                    # Adjust volatility based on interest (can increase up to 3x)
-                    volatility = base_volatility * (1 + min(2, interest_score / 10))
-                    
-                    # More frequent updates for high-interest stocks
-                    if random.random() < (interest_score / 20):  # Probability increases with interest
-                        # Calculate price change
+                    if random.random() < (interest_score / 15):
                         change_percentage = random.uniform(-volatility, volatility)
                         old_price = stock.price
                         new_price = old_price * (1 + change_percentage)
                         
-                        # Ensure price stays within reasonable bounds
-                        min_price = stock.initial_price * 0.1  # Don't go below 10% of initial price
-                        max_price = stock.initial_price * 10   # Don't go above 1000% of initial price
+                        # Enhanced bounds checking
+                        min_price = max(0.01, stock.initial_price * 0.2)
+                        max_price = stock.initial_price * 5
                         new_price = max(min_price, min(max_price, new_price))
                         
-                        # Update stock price and record history
                         stock.previous_close = stock.price
                         stock.price = new_price
                         
-                        # Record trade history
                         price_change = ((new_price - old_price) / old_price) * 100
+                        volume = int(max(10, interest_score * 50))
+                        
                         history = StockHistory(
                             stock_id=stock.id,
                             price=new_price,
                             price_change=price_change,
-                            volume=int(interest_score * 100)  # Volume based on interest
+                            volume=volume
                         )
                         db.session.add(history)
+                        
                 except Exception as e:
                     print(f"Error updating stock {stock.symbol}: {str(e)}")
                     db.session.rollback()
@@ -1051,31 +1062,42 @@ def update_stock_prices():
     
     except Exception as e:
         print(f"Error in update_stock_prices: {str(e)}")
-        # Don't raise the exception - let the scheduler continue running
 
-# Move scheduler creation to a function
-def create_scheduler():
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(func=update_stock_prices, trigger="interval", seconds=30)
-    
-    # Proper shutdown handling
-    def shutdown_scheduler():
-        if scheduler.running:
-            scheduler.shutdown()
-    
-    atexit.register(shutdown_scheduler)
-    
+def shutdown_scheduler(scheduler):
     try:
-        scheduler.start()
-    except (KeyboardInterrupt, SystemExit):
-        pass
-    
-    return scheduler
+        if scheduler and scheduler.running:
+            scheduler.shutdown(wait=True)
+    except Exception as e:
+        print(f"Error shutting down scheduler: {str(e)}")
 
-# Initialize app and scheduler only when running directly
-if __name__ == '__main__':
+def create_scheduler():
+    """Create and configure the scheduler with proper error handling"""
+    try:
+        scheduler = BackgroundScheduler(
+            job_defaults={
+                'coalesce': True,
+                'max_instances': 1,
+                'misfire_grace_time': 15
+            }
+        )
+        scheduler.add_job(
+            func=update_stock_prices,
+            trigger="interval",
+            seconds=45
+        )
+        
+        atexit.register(lambda: shutdown_scheduler(scheduler))
+        
+        scheduler.start()
+        return scheduler
+    except Exception as e:
+        print(f"Error creating scheduler: {str(e)}")
+        return None
+
+# Initialize scheduler only once
+scheduler = None
+if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
     scheduler = create_scheduler()
-    app.run(debug=True)
-else:
-    # For production (when running under Gunicorn)
-    scheduler = create_scheduler() 
+
+if __name__ == '__main__':
+    app.run(debug=True) 
