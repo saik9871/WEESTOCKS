@@ -35,13 +35,13 @@ if not database_url:
 if database_url.startswith("postgres://"):
     database_url = database_url.replace("postgres://", "postgresql://", 1)
 
-print("Connecting to database:", database_url.split('@')[1] if '@' in database_url else 'database')  # Safe printing of DB URL
+print("Connecting to database:", database_url.split('@')[1] if '@' in database_url else 'database')
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', secrets.token_hex(16))
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Enhanced database configuration
+# Enhanced database configuration for production
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'pool_size': 20,
     'max_overflow': 30,
@@ -52,9 +52,9 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
 }
 
 # Twitch OAuth Configuration
-TWITCH_CLIENT_ID = 'shdewm91zxskpkg12fi3hphsfsajlc'
-TWITCH_CLIENT_SECRET = 'q4kuhmknmf7i56mxwz4tfkkad18av3'
-TWITCH_REDIRECT_URI = 'https://weenstock.up.railway.app/auth/twitch/callback'  # Updated to production URL
+TWITCH_CLIENT_ID = os.getenv('TWITCH_CLIENT_ID', 'shdewm91zxskpkg12fi3hphsfsajlc')
+TWITCH_CLIENT_SECRET = os.getenv('TWITCH_CLIENT_SECRET', 'q4kuhmknmf7i56mxwz4tfkkad18av3')
+TWITCH_REDIRECT_URI = 'https://weenstock.up.railway.app/auth/twitch/callback'
 
 # Create engine with optimized settings
 engine = create_engine(
@@ -1233,9 +1233,7 @@ def update_stock_prices():
         with app.app_context():
             # Get all stocks with a single query
             stocks = Stock.query.with_for_update().all()
-            updates = []
             histories = []
-            
             current_time = datetime.utcnow()
             
             for stock in stocks:
@@ -1244,7 +1242,7 @@ def update_stock_prices():
                     interest_score = stock.calculate_interest_score()
                     
                     # Use interest score to determine update probability
-                    if random.random() < (interest_score / 10):  # Normalized probability
+                    if random.random() < (interest_score / 10):
                         # Calculate volatility based on interest
                         base_volatility = 0.002  # 0.2% base volatility
                         max_volatility = 0.015   # 1.5% max volatility
@@ -1263,12 +1261,12 @@ def update_stock_prices():
                         max_price = stock.initial_price * 5
                         new_price = max(min_price, min(max_price, new_price))
                         
-                        # Prepare updates
+                        # Update stock
                         stock.previous_close = stock.price
                         stock.price = new_price
                         
                         # Calculate trading volume based on interest
-                        volume = int(10 + interest_score * 20)  # Base volume + interest-based volume
+                        volume = int(10 + interest_score * 20)
                         
                         # Create history record
                         history = StockHistory(
@@ -1369,7 +1367,7 @@ def teardown_request(exception=None):
 # Add database health check
 def check_db_connection():
     try:
-        db.session.execute('SELECT 1')
+        db.session.execute(text('SELECT 1'))
         return True
     except Exception as e:
         print(f"Database connection error: {str(e)}")
@@ -1388,5 +1386,5 @@ scheduler.add_job(
 )
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 8080))  # Changed default port to 8080 for Railway
     app.run(host='0.0.0.0', port=port) 
