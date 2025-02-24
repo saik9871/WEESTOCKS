@@ -1025,30 +1025,14 @@
         formData.append('quantity', quantity);
         formData.append('action', 'buy');
 
-        fetch('/trade', {  // Use relative URL
+        fetch('https://weenstock.up.railway.app/trade', {
             method: 'POST',
-            body: formData,
-            credentials: 'include'
+            body: formData
         })
         .then(response => {
-            console.log('Response status:', response.status);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.text();
-        })
-        .then(text => {
-            console.log('Response text:', text);
-            try {
-                const data = text ? JSON.parse(text) : {};
-                if (data.error) {
-                    alert(data.error);
-                } else {
-                    location.reload();
-                }
-            } catch (e) {
-                console.error('Error parsing response:', e);
-                console.log('Raw response:', text);
+            if (response.ok) {
+                location.reload();
+            } else {
                 alert('Failed to execute buy order. Please try again.');
             }
         })
@@ -1064,30 +1048,14 @@
         formData.append('quantity', quantity);
         formData.append('action', 'sell');
 
-        fetch('/trade', {  // Use relative URL
+        fetch('https://weenstock.up.railway.app/trade', {
             method: 'POST',
-            body: formData,
-            credentials: 'include'
+            body: formData
         })
         .then(response => {
-            console.log('Response status:', response.status);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.text();
-        })
-        .then(text => {
-            console.log('Response text:', text);
-            try {
-                const data = text ? JSON.parse(text) : {};
-                if (data.error) {
-                    alert(data.error);
-                } else {
-                    location.reload();
-                }
-            } catch (e) {
-                console.error('Error parsing response:', e);
-                console.log('Raw response:', text);
+            if (response.ok) {
+                location.reload();
+            } else {
                 alert('Failed to execute sell order. Please try again.');
             }
         })
