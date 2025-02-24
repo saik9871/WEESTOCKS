@@ -13,7 +13,7 @@ import secrets
 import random
 from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
-from sqlalchemy import exc, inspect
+from sqlalchemy import exc, inspect, text
 
 # Load environment variables
 load_dotenv()
@@ -175,14 +175,18 @@ with app.app_context():
     # Check if columns exist and add them if they don't
     existing_columns = [column['name'] for column in inspector.get_columns('stock')]
     
-    if 'last_viewed' not in existing_columns:
-        db.session.execute('ALTER TABLE stock ADD COLUMN IF NOT EXISTS last_viewed TIMESTAMP')
-    if 'view_count' not in existing_columns:
-        db.session.execute('ALTER TABLE stock ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0')
-    if 'trade_count' not in existing_columns:
-        db.session.execute('ALTER TABLE stock ADD COLUMN IF NOT EXISTS trade_count INTEGER DEFAULT 0')
-    
-    db.session.commit()
+    try:
+        if 'last_viewed' not in existing_columns:
+            db.session.execute(text('ALTER TABLE stock ADD COLUMN IF NOT EXISTS last_viewed TIMESTAMP'))
+        if 'view_count' not in existing_columns:
+            db.session.execute(text('ALTER TABLE stock ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0'))
+        if 'trade_count' not in existing_columns:
+            db.session.execute(text('ALTER TABLE stock ADD COLUMN IF NOT EXISTS trade_count INTEGER DEFAULT 0'))
+        
+        db.session.commit()
+    except Exception as e:
+        print(f"Error adding columns: {str(e)}")
+        db.session.rollback()
     
     # Add initial stocks only if the stocks table is empty
     if not Stock.query.first():
@@ -205,7 +209,9 @@ with app.app_context():
                 total_shares=1000000,
                 shares_held=0,
                 previous_close=790.82,
-                initial_price=466.05
+                initial_price=466.05,
+                view_count=0,
+                trade_count=0
             ),
             Stock(
                 symbol='SURAJ',
@@ -214,13 +220,19 @@ with app.app_context():
                 total_shares=1000000,
                 shares_held=0,
                 previous_close=493.82,
-                initial_price=431.89
+                initial_price=431.89,
+                view_count=0,
+                trade_count=0
             )
         ]
         for stock in initial_stocks:
             db.session.add(stock)
-        db.session.commit()
-        print("Initial stocks added to database")
+        try:
+            db.session.commit()
+            print("Initial stocks added to database")
+        except Exception as e:
+            print(f"Error adding initial stocks: {str(e)}")
+            db.session.rollback()
 
 def calculate_new_price(current_price, quantity, is_buy):
     # Base impact uses a sigmoid function to create diminishing returns for large quantities
