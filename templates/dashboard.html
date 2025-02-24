@@ -1019,31 +1019,27 @@
     }
 
     function executeBuyOrder(symbol, price, quantity) {
-        const form = new FormData();
-        form.append('symbol', symbol);
-        form.append('quantity', quantity);
-        form.append('action', 'buy');
+        const formData = new FormData();
+        formData.append('symbol', symbol);
+        formData.append('quantity', quantity);
+        formData.append('action', 'buy');
 
         fetch('/trade', {
             method: 'POST',
-            body: form,
-            headers: {
-                'Accept': 'application/json'
-            }
+            body: formData
         })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            return response.text().then(text => {
-                return text ? JSON.parse(text) : {}
-            });
-        })
-        .then(data => {
-            if (data.error) {
-                alert(data.error);
-            } else {
-                location.reload();
+        .then(response => response.text())
+        .then(text => {
+            try {
+                const data = text ? JSON.parse(text) : {};
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    location.reload();
+                }
+            } catch (e) {
+                console.error('Error parsing response:', e);
+                alert('Failed to execute buy order. Please try again.');
             }
         })
         .catch(error => {
@@ -1053,31 +1049,27 @@
     }
 
     function executeSellOrder(symbol, price, quantity) {
-        const form = new FormData();
-        form.append('symbol', symbol);
-        form.append('quantity', quantity);
-        form.append('action', 'sell');
+        const formData = new FormData();
+        formData.append('symbol', symbol);
+        formData.append('quantity', quantity);
+        formData.append('action', 'sell');
 
         fetch('/trade', {
             method: 'POST',
-            body: form,
-            headers: {
-                'Accept': 'application/json'
-            }
+            body: formData
         })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            return response.text().then(text => {
-                return text ? JSON.parse(text) : {}
-            });
-        })
-        .then(data => {
-            if (data.error) {
-                alert(data.error);
-            } else {
-                location.reload();
+        .then(response => response.text())
+        .then(text => {
+            try {
+                const data = text ? JSON.parse(text) : {};
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    location.reload();
+                }
+            } catch (e) {
+                console.error('Error parsing response:', e);
+                alert('Failed to execute sell order. Please try again.');
             }
         })
         .catch(error => {
