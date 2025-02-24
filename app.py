@@ -13,7 +13,7 @@ import secrets
 import random
 from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
-from sqlalchemy import exc
+from sqlalchemy import exc, inspect
 
 # Load environment variables
 load_dotenv()
@@ -82,9 +82,9 @@ class Stock(db.Model):
     shares_held = db.Column(db.Integer, nullable=False)
     previous_close = db.Column(db.Float, nullable=False, default=0.0)
     initial_price = db.Column(db.Float, nullable=False)
-    last_viewed = db.Column(db.DateTime, nullable=True)  # Track when stock was last viewed
-    view_count = db.Column(db.Integer, default=0)  # Track number of views
-    trade_count = db.Column(db.Integer, default=0)  # Track number of trades
+    last_viewed = db.Column(db.DateTime, nullable=True)
+    view_count = db.Column(db.Integer, default=0)
+    trade_count = db.Column(db.Integer, default=0)
 
     def get_day_change(self):
         if self.previous_close == 0:
@@ -97,22 +97,15 @@ class Stock(db.Model):
         return ((self.price - self.initial_price) / self.initial_price) * 100
 
     def calculate_interest_score(self):
-        # Calculate how recent the last view was (if any)
         time_factor = 1.0
         if self.last_viewed:
             hours_since_view = (datetime.utcnow() - self.last_viewed).total_seconds() / 3600
-            time_factor = max(0.1, 1.0 / (1 + hours_since_view))  # Decay over time
-
-        # Combine views and trades with weights
-        view_weight = 0.4  # Increased from 0.3
-        trade_weight = 0.6  # Increased from 0.5
-
-        interest_score = (
-            (self.view_count * view_weight) +
-            (self.trade_count * trade_weight)
-        ) * time_factor
-
-        return interest_score
+            time_factor = max(0.1, 1.0 / (1 + hours_since_view))
+        
+        view_weight = 0.4
+        trade_weight = 0.6
+        
+        return ((self.view_count * view_weight) + (self.trade_count * trade_weight)) * time_factor
 
 class Position(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -167,9 +160,29 @@ class Comment(db.Model):
     user = db.relationship('User', backref='comments')
     replies = db.relationship('Comment', backref=db.backref('parent', remote_side=[id]))
 
-# Initialize database and add initial stocks only if they don't exist
+def add_column(engine, table_name, column):
+    column_name = column.compile(dialect=engine.dialect)
+    column_type = column.type.compile(engine.dialect)
+    engine.execute(f'ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS {column_name} {column_type}')
+
+# Initialize database and handle missing columns
 with app.app_context():
-    db.create_all()  # This will create tables if they don't exist
+    inspector = inspect(db.engine)
+    
+    # Create all tables first
+    db.create_all()
+    
+    # Check if columns exist and add them if they don't
+    existing_columns = [column['name'] for column in inspector.get_columns('stock')]
+    
+    if 'last_viewed' not in existing_columns:
+        db.session.execute('ALTER TABLE stock ADD COLUMN IF NOT EXISTS last_viewed TIMESTAMP')
+    if 'view_count' not in existing_columns:
+        db.session.execute('ALTER TABLE stock ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0')
+    if 'trade_count' not in existing_columns:
+        db.session.execute('ALTER TABLE stock ADD COLUMN IF NOT EXISTS trade_count INTEGER DEFAULT 0')
+    
+    db.session.commit()
     
     # Add initial stocks only if the stocks table is empty
     if not Stock.query.first():
@@ -180,8 +193,10 @@ with app.app_context():
                 price=930.00,
                 total_shares=1000000,
                 shares_held=0,
-                previous_close=836.48,  # Previous day's close
-                initial_price=301.71    # Initial price
+                previous_close=836.48,
+                initial_price=301.71,
+                view_count=0,
+                trade_count=0
             ),
             Stock(
                 symbol='TITANBIO',
