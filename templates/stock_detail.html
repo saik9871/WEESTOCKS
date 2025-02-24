@@ -450,12 +450,22 @@ function executeBuy() {
     formData.append('quantity', quantity);
     formData.append('action', 'buy');
 
-    fetch('/trade', {
+    fetch('https://weenstock.up.railway.app/trade', {
         method: 'POST',
         body: formData
     })
-    .then(response => response.text())
+    .then(response => {
+        console.log('Response status:', response.status);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.text();
+    })
     .then(text => {
+        console.log('Response text:', text);
+        if (text.includes('Bad Request')) {
+            throw new Error('Server rejected the request');
+        }
         try {
             const data = text ? JSON.parse(text) : {};
             if (data.error) {
@@ -492,12 +502,22 @@ function executeSell() {
     formData.append('quantity', quantity);
     formData.append('action', 'sell');
 
-    fetch('/trade', {
+    fetch('https://weenstock.up.railway.app/trade', {
         method: 'POST',
         body: formData
     })
-    .then(response => response.text())
+    .then(response => {
+        console.log('Response status:', response.status);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.text();
+    })
     .then(text => {
+        console.log('Response text:', text);
+        if (text.includes('Bad Request')) {
+            throw new Error('Server rejected the request');
+        }
         try {
             const data = text ? JSON.parse(text) : {};
             if (data.error) {
