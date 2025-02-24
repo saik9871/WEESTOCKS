@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session, g
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -15,8 +15,6 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
 from sqlalchemy import exc, inspect, text, create_engine
 from sqlalchemy.pool import QueuePool
-from flask_caching import Cache
-import redis
 
 # Load environment variables
 load_dotenv()
@@ -71,31 +69,6 @@ engine = create_engine(
 
 db = SQLAlchemy(app)
 db.engine = engine
-
-# Redis configuration
-redis_client = redis.Redis(
-    host=os.getenv('REDIS_HOST', 'localhost'),
-    port=int(os.getenv('REDIS_PORT', 6379)),
-    db=0,
-    decode_responses=True
-)
-
-# Cache configuration
-cache = Cache(app, config={
-    'CACHE_TYPE': 'redis',
-    'CACHE_REDIS_HOST': os.getenv('REDIS_HOST', 'localhost'),
-    'CACHE_REDIS_PORT': int(os.getenv('REDIS_PORT', 6379)),
-    'CACHE_DEFAULT_TIMEOUT': 300
-})
-
-# Cache key prefixes
-CACHE_KEYS = {
-    'user_portfolio': 'portfolio_{}',
-    'stock_price': 'stock_price_{}',
-    'prediction_data': 'prediction_{}',
-    'active_predictions': 'active_predictions',
-    'user_bets': 'user_bets_{}'
-}
 
 # Models
 class User(db.Model):
@@ -1279,7 +1252,6 @@ def update_stock_prices():
                         # Sigmoid function for smooth volatility scaling
                         volatility = base_volatility + (max_volatility - base_volatility) * (
                             1 / (1 + math.exp(-2 * (interest_score - 2)))
-                        )
                         
                         # Calculate price change
                         change_percentage = random.uniform(-volatility, volatility)
