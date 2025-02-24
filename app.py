@@ -13,6 +13,7 @@ import secrets
 import random
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import func, desc
+import atexit
 
 # Load environment variables
 load_dotenv()
@@ -999,49 +1000,82 @@ def add_comment(symbol):
 
 def update_stock_prices():
     """Background task to update stock prices based on user interest"""
-    with app.app_context():
-        stocks = Stock.query.all()
-        for stock in stocks:
-            interest_score = stock.calculate_interest_score()
+    try:
+        with app.app_context():
+            stocks = Stock.query.all()
+            for stock in stocks:
+                try:
+                    interest_score = stock.calculate_interest_score()
+                    
+                    # Base volatility (0.5% to 2%)
+                    base_volatility = random.uniform(0.005, 0.02)
+                    
+                    # Adjust volatility based on interest (can increase up to 3x)
+                    volatility = base_volatility * (1 + min(2, interest_score / 10))
+                    
+                    # More frequent updates for high-interest stocks
+                    if random.random() < (interest_score / 20):  # Probability increases with interest
+                        # Calculate price change
+                        change_percentage = random.uniform(-volatility, volatility)
+                        old_price = stock.price
+                        new_price = old_price * (1 + change_percentage)
+                        
+                        # Ensure price stays within reasonable bounds
+                        min_price = stock.initial_price * 0.1  # Don't go below 10% of initial price
+                        max_price = stock.initial_price * 10   # Don't go above 1000% of initial price
+                        new_price = max(min_price, min(max_price, new_price))
+                        
+                        # Update stock price and record history
+                        stock.previous_close = stock.price
+                        stock.price = new_price
+                        
+                        # Record trade history
+                        price_change = ((new_price - old_price) / old_price) * 100
+                        history = StockHistory(
+                            stock_id=stock.id,
+                            price=new_price,
+                            price_change=price_change,
+                            volume=int(interest_score * 100)  # Volume based on interest
+                        )
+                        db.session.add(history)
+                except Exception as e:
+                    print(f"Error updating stock {stock.symbol}: {str(e)}")
+                    db.session.rollback()
+                    continue
             
-            # Base volatility (0.5% to 2%)
-            base_volatility = random.uniform(0.005, 0.02)
-            
-            # Adjust volatility based on interest (can increase up to 3x)
-            volatility = base_volatility * (1 + min(2, interest_score / 10))
-            
-            # More frequent updates for high-interest stocks
-            if random.random() < (interest_score / 20):  # Probability increases with interest
-                # Calculate price change
-                change_percentage = random.uniform(-volatility, volatility)
-                old_price = stock.price
-                new_price = old_price * (1 + change_percentage)
-                
-                # Ensure price stays within reasonable bounds
-                min_price = stock.initial_price * 0.1  # Don't go below 10% of initial price
-                max_price = stock.initial_price * 10   # Don't go above 1000% of initial price
-                new_price = max(min_price, min(max_price, new_price))
-                
-                # Update stock price and record history
-                stock.previous_close = stock.price
-                stock.price = new_price
-                
-                # Record trade history
-                price_change = ((new_price - old_price) / old_price) * 100
-                history = StockHistory(
-                    stock_id=stock.id,
-                    price=new_price,
-                    price_change=price_change,
-                    volume=int(interest_score * 100)  # Volume based on interest
-                )
-                db.session.add(history)
-        
-        db.session.commit()
+            try:
+                db.session.commit()
+            except Exception as e:
+                print(f"Error committing stock updates: {str(e)}")
+                db.session.rollback()
+    
+    except Exception as e:
+        print(f"Error in update_stock_prices: {str(e)}")
+        # Don't raise the exception - let the scheduler continue running
 
-# Initialize the scheduler
-scheduler = BackgroundScheduler()
-scheduler.add_job(func=update_stock_prices, trigger="interval", seconds=30)
-scheduler.start()
+# Move scheduler creation to a function
+def create_scheduler():
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(func=update_stock_prices, trigger="interval", seconds=30)
+    
+    # Proper shutdown handling
+    def shutdown_scheduler():
+        if scheduler.running:
+            scheduler.shutdown()
+    
+    atexit.register(shutdown_scheduler)
+    
+    try:
+        scheduler.start()
+    except (KeyboardInterrupt, SystemExit):
+        pass
+    
+    return scheduler
 
+# Initialize app and scheduler only when running directly
 if __name__ == '__main__':
-    app.run(debug=True) 
+    scheduler = create_scheduler()
+    app.run(debug=True)
+else:
+    # For production (when running under Gunicorn)
+    scheduler = create_scheduler() 
