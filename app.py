@@ -15,7 +15,7 @@ load_dotenv()
 app = Flask(__name__)
 
 # Use DATABASE_URL from environment variables, fallback to SQLite for local development
-database_url = os.getenv('DATABASE_URL', 'sqlite:///weestocks.db')
+database_url = os.getenv('DATABASE_URL', 'postgresql://neondb_owner:npg_G9shViASrx8J@ep-late-unit-a80vzjan-pooler.eastus2.azure.neon.tech/neondb?sslmode=require')
 if database_url.startswith("postgres://"):
     database_url = database_url.replace("postgres://", "postgresql://", 1)
 
@@ -27,7 +27,7 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=31)  # Session lasts f
 # Twitch OAuth Configuration
 TWITCH_CLIENT_ID = 'shdewm91zxskpkg12fi3hphsfsajlc'
 TWITCH_CLIENT_SECRET = 'q4kuhmknmf7i56mxwz4tfkkad18av3'
-TWITCH_REDIRECT_URI = os.getenv('TWITCH_REDIRECT_URI', 'https://weenstock.up.railway.app/auth/twitch/callback')
+TWITCH_REDIRECT_URI = os.getenv('TWITCH_REDIRECT_URI', 'http://localhost:5000/auth/twitch/callback')
 
 db = SQLAlchemy(app)
 
@@ -114,6 +114,19 @@ class Vote(db.Model):
 
     # Ensure users can only vote once per prediction
     __table_args__ = (db.UniqueConstraint('user_id', 'prediction_id', name='unique_user_prediction_vote'),)
+
+class Comment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    stock_id = db.Column(db.Integer, db.ForeignKey('stock.id'), nullable=False)
+    parent_id = db.Column(db.Integer, db.ForeignKey('comment.id'), nullable=True)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = db.relationship('User', backref='comments')
+    replies = db.relationship('Comment', backref=db.backref('parent', remote_side=[id]))
 
 # Initialize database and add initial stocks only if they don't exist
 with app.app_context():
@@ -863,6 +876,86 @@ def delete_prediction(prediction_id):
         
         return jsonify({'success': True, 'message': 'Prediction deleted successfully'})
     
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/stock/<symbol>')
+def stock_detail(symbol):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    stock = Stock.query.filter_by(symbol=symbol).first_or_404()
+    user = User.query.get(session['user_id'])
+    
+    # Get stock history for the graph
+    history = StockHistory.query.filter_by(stock_id=stock.id)\
+        .order_by(StockHistory.timestamp.desc())\
+        .limit(100)\
+        .all()
+    history.reverse()  # Show oldest to newest
+    
+    # Format data for the graph
+    graph_data = {
+        'timestamps': [h.timestamp.strftime('%Y-%m-%d %H:%M:%S') for h in history],
+        'prices': [float(h.price) for h in history],
+        'volumes': [h.volume for h in history]
+    }
+    
+    # Get comments with replies
+    comments = Comment.query.filter_by(stock_id=stock.id, parent_id=None)\
+        .order_by(Comment.created_at.desc())\
+        .all()
+    
+    return render_template('stock_detail.html',
+                         stock=stock,
+                         user=user,
+                         graph_data=graph_data,
+                         comments=comments)
+
+@app.route('/api/stock/<symbol>/history')
+def stock_history(symbol):
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    stock = Stock.query.filter_by(symbol=symbol).first_or_404()
+    history = StockHistory.query.filter_by(stock_id=stock.id)\
+        .order_by(StockHistory.timestamp.desc())\
+        .limit(100)\
+        .all()
+    history.reverse()
+    
+    return jsonify({
+        'timestamps': [h.timestamp.strftime('%Y-%m-%d %H:%M:%S') for h in history],
+        'prices': [float(h.price) for h in history],
+        'volumes': [h.volume for h in history]
+    })
+
+@app.route('/api/stock/<symbol>/comment', methods=['POST'])
+def add_comment(symbol):
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    stock = Stock.query.filter_by(symbol=symbol).first_or_404()
+    data = request.get_json()
+    
+    try:
+        comment = Comment(
+            user_id=session['user_id'],
+            stock_id=stock.id,
+            content=data['content'],
+            parent_id=data.get('parent_id')
+        )
+        db.session.add(comment)
+        db.session.commit()
+        
+        return jsonify({
+            'id': comment.id,
+            'content': comment.content,
+            'username': comment.user.username,
+            'profile_image': comment.user.twitch_profile_image,
+            'created_at': comment.created_at.strftime('%Y-%m-%d %H:%M:%S')
+        })
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500

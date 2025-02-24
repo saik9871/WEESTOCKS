@@ -295,29 +295,130 @@
 
         .stocks-table {
             width: 100%;
-            border-collapse: collapse;
+            border-collapse: separate;
+            border-spacing: 0;
             margin-top: 2rem;
+            background: var(--dark-gray);
+            border-radius: 12px;
+            overflow: hidden;
         }
 
         .stocks-table th {
             text-align: left;
-            padding: 1rem;
+            padding: 1rem 1.5rem;
             color: var(--accent);
-            font-weight: normal;
+            font-weight: 500;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            background: var(--black);
             border-bottom: 1px solid var(--gray);
         }
 
         .stocks-table td {
-            padding: 1rem;
-            border-bottom: 1px solid var(--gray);
+            padding: 1rem 1.5rem;
+            font-size: 0.95rem;
+            border-bottom: 1px solid rgba(102, 102, 102, 0.1);
+        }
+
+        .stocks-table tbody tr {
+            transition: all 0.2s ease;
+        }
+
+        .stocks-table tbody tr:hover {
+            background: rgba(136, 136, 136, 0.1);
+            cursor: pointer;
+        }
+
+        .stocks-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .stocks-table td:first-child {
+            font-weight: 500;
+            color: #fff;
+        }
+
+        .stocks-table td:not(:first-child):not(:last-child) {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.9rem;
         }
 
         .positive-change {
-            color: var(--green);
+            color: #00f2a6 !important;
         }
 
         .negative-change {
-            color: var(--red);
+            color: #ff6b6b !important;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+        }
+
+        .btn-buy {
+            background: rgba(0, 242, 166, 0.1);
+            color: #00f2a6;
+            border: 1px solid #00f2a6;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .btn-buy:hover {
+            background: #00f2a6;
+            color: var(--black);
+        }
+
+        .btn-sell {
+            background: rgba(255, 107, 107, 0.1);
+            color: #ff6b6b;
+            border: 1px solid #ff6b6b;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .btn-sell:hover {
+            background: #ff6b6b;
+            color: var(--black);
+        }
+
+        .sortable {
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            padding-right: 1.5rem !important;
+        }
+
+        .sortable i {
+            position: absolute;
+            right: 0.5rem;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 0.8rem;
+            opacity: 0.5;
+            transition: all 0.2s ease;
+        }
+
+        .sortable:hover i {
+            opacity: 1;
+        }
+
+        .sortable.asc i {
+            opacity: 1;
+            color: #00f2a6;
+        }
+
+        .sortable.desc i {
+            opacity: 1;
+            color: #ff6b6b;
         }
 
         .holdings-summary {
@@ -723,34 +824,38 @@
             font-size: 1.2rem;
         }
 
-        /* Add these styles to the existing style section */
-        .sortable {
-            cursor: pointer;
-            user-select: none;
-            position: relative;
+        /* Add these styles for the quantity input and trade actions */
+        .trade-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
 
-        .sortable:hover {
-            background: var(--dark-gray);
+        .qty-input {
+            width: 80px;
+            background: var(--black);
+            border: 1px solid var(--gray);
+            border-radius: 4px;
+            color: var(--text);
+            padding: 0.4rem;
+            font-size: 0.85rem;
+            text-align: center;
+            font-family: 'Roboto Mono', monospace;
         }
 
-        .sortable i {
-            margin-left: 5px;
-            font-size: 0.8em;
-            opacity: 0.5;
+        .qty-input:focus {
+            outline: none;
+            border-color: var(--accent);
         }
 
-        .sortable.asc i {
-            opacity: 1;
-            transform: rotate(180deg);
+        .qty-input::-webkit-inner-spin-button,
+        .qty-input::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
         }
 
-        .sortable.desc i {
-            opacity: 1;
-        }
-
-        .sortable:hover i {
-            opacity: 0.8;
+        .qty-input[type=number] {
+            -moz-appearance: textfield;
         }
     </style>
 </head>
@@ -758,17 +863,17 @@
     <div class="dashboard">
         <aside class="sidebar">
             <h1 class="logo">WEENSTOCKS</h1>
-            <a href="{{ url_for('portfolio') }}" class="portfolio-btn">
+            <a href="https://weenstock.up.railway.app/portfolio" class="portfolio-btn">
                 <i class="fas fa-chart-pie"></i> Portfolio
             </a>
-            <a href="{{ url_for('predictions') }}" class="portfolio-btn" style="margin-top: -1rem;">
+            <a href="https://weenstock.up.railway.app/predictions" class="portfolio-btn" style="margin-top: -1rem;">
                 <i class="fas fa-chart-line"></i> Predictions
             </a>
-            <a href="{{ url_for('leaderboard') }}" class="portfolio-btn" style="margin-top: -1rem;">
+            <a href="https://weenstock.up.railway.app/leaderboard" class="portfolio-btn" style="margin-top: -1rem;">
                 <i class="fas fa-trophy"></i> Leaderboard
             </a>
             {% if user.is_admin %}
-            <a href="{{ url_for('admin_panel') }}" class="portfolio-btn" style="background: var(--black); margin-top: -1rem;">
+            <a href="https://weenstock.up.railway.app/admin" class="portfolio-btn" style="background: var(--black); margin-top: -1rem;">
                 <i class="fas fa-shield-alt"></i> Admin Panel
             </a>
             {% endif %}
@@ -779,7 +884,7 @@
                 </div>
                 <div class="wallet-balance">${{ "%.2f"|format(user.cash) }}</div>
             </div>
-            <a href="{{ url_for('logout') }}" class="logout-btn">
+            <a href="https://weenstock.up.railway.app/logout" class="logout-btn">
                 <i class="fas fa-sign-out-alt"></i>
                 Logout
             </a>
@@ -834,51 +939,55 @@
             <table class="stocks-table">
                 <thead>
                     <tr>
-                        <th class="sortable" data-sort="symbol">Instrument <i class="fas fa-sort"></i></th>
-                        <th class="sortable" data-sort="quantity">Qty. <i class="fas fa-sort"></i></th>
-                        <th class="sortable" data-sort="cost">Avg. cost <i class="fas fa-sort"></i></th>
-                        <th class="sortable" data-sort="price">LTP <i class="fas fa-sort"></i></th>
-                        <th class="sortable" data-sort="value">Current Value <i class="fas fa-sort"></i></th>
+                        <th class="sortable" data-sort="instrument">Instrument <i class="fas fa-sort"></i></th>
+                        <th class="sortable" data-sort="qty">Qty. <i class="fas fa-sort"></i></th>
+                        <th class="sortable" data-sort="avgcost">Avg. cost <i class="fas fa-sort"></i></th>
+                        <th class="sortable" data-sort="ltp">LTP <i class="fas fa-sort"></i></th>
+                        <th class="sortable" data-sort="currentvalue">Current Value <i class="fas fa-sort"></i></th>
                         <th class="sortable" data-sort="pl">P&L <i class="fas fa-sort"></i></th>
-                        <th class="sortable" data-sort="net">Net chg. <i class="fas fa-sort"></i></th>
-                        <th class="sortable" data-sort="day">Day chg. <i class="fas fa-sort"></i></th>
+                        <th class="sortable" data-sort="netchg">Net chg. <i class="fas fa-sort"></i></th>
+                        <th class="sortable" data-sort="daychg">Day chg. <i class="fas fa-sort"></i></th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for stock in stocks %}
-                    <tr {% if loop.index <= 3 %}class="trending-row"{% endif %}>
-                        <td>
-                            {{ stock.symbol }}
-                            {% if loop.index <= 3 %}
-                            <span class="trending-indicator">
-                                <i class="fas fa-fire trending-icon"></i>
-                                Trending
-                            </span>
-                            {% endif %}
-                        </td>
-                        <td>{{ positions[stock.id].shares if stock.id in positions else 0 }}</td>
+                    <tr onclick="window.location.href='https://weenstock.up.railway.app/stock/{{ stock.symbol }}'">
+                        <td>{{ stock.symbol }}</td>
+                        <td>{{ positions.get(stock.id, {'shares': 0}).shares }}</td>
                         <td>${{ "%.2f"|format(stock.initial_price) }}</td>
                         <td>${{ "%.2f"|format(stock.price) }}</td>
-                        <td>${{ "%.2f"|format(stock.price * (positions[stock.id].shares if stock.id in positions else 0)) }}</td>
-                        <td class="{% if stock.get_net_change() > 0 %}positive-change{% else %}negative-change{% endif %}">
-                            ${{ "%.2f"|format(((stock.price - stock.initial_price) * (positions[stock.id].shares if stock.id in positions else 0))|abs) }}
+                        <td>${{ "%.2f"|format(positions.get(stock.id, {'shares': 0}).shares * stock.price) }}</td>
+                        {% set position = positions.get(stock.id, {'shares': 0}) %}
+                        {% set pl = position.shares * (stock.price - stock.initial_price) %}
+                        <td class="{% if pl > 0 %}positive-change{% elif pl < 0 %}negative-change{% endif %}">
+                            ${{ "%.2f"|format(pl|abs) }}
                         </td>
-                        <td class="{% if stock.get_net_change() > 0 %}positive-change{% else %}negative-change{% endif %}">
-                            {{ "%+.2f"|format(stock.get_net_change()) }}%
+                        <td class="{% if stock.get_net_change() > 0 %}positive-change{% elif stock.get_net_change() < 0 %}negative-change{% endif %}">
+                            {{ "%.2f"|format(stock.get_net_change()) }}%
                         </td>
-                        <td class="{% if stock.get_day_change() > 0 %}positive-change{% else %}negative-change{% endif %}">
-                            {{ "%+.2f"|format(stock.get_day_change()) }}%
+                        <td class="{% if stock.get_day_change() > 0 %}positive-change{% elif stock.get_day_change() < 0 %}negative-change{% endif %}">
+                            {{ "%.2f"|format(stock.get_day_change()) }}%
                         </td>
-                        <td>
-                            <form class="trade-form" action="{{ url_for('trade') }}" method="POST">
-                                <input type="hidden" name="symbol" value="{{ stock.symbol }}">
-                                <input type="number" name="quantity" class="trade-input" min="1" placeholder="Qty" required>
-                                <div class="trade-buttons">
-                                    <button type="submit" name="action" value="buy" class="trade-btn buy-btn">Buy</button>
-                                    <button type="submit" name="action" value="sell" class="trade-btn sell-btn">Sell</button>
+                        <td onclick="event.stopPropagation();">
+                            <div class="trade-actions">
+                                <input type="number" 
+                                       class="qty-input" 
+                                       placeholder="Qty"
+                                       min="1"
+                                       id="qty-{{ stock.symbol }}"
+                                       onkeypress="return event.charCode >= 48 && event.charCode <= 57">
+                                <div class="action-buttons">
+                                    <button onclick="handleTrade('{{ stock.symbol }}', {{ stock.price }}, 'buy', {{ positions.get(stock.id, {'shares': 0}).shares }})" class="btn-buy">
+                                        Buy
+                                    </button>
+                                    {% if positions.get(stock.id, {'shares': 0}).shares > 0 %}
+                                    <button onclick="handleTrade('{{ stock.symbol }}', {{ stock.price }}, 'sell', {{ positions.get(stock.id, {'shares': 0}).shares }})" class="btn-sell">
+                                        Sell
+                                    </button>
+                                    {% endif %}
                                 </div>
-                            </form>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}
@@ -888,6 +997,85 @@
     </div>
 
     <script>
+    // Trading functions
+    function handleTrade(symbol, price, action, maxShares) {
+        const qtyInput = document.getElementById(`qty-${symbol}`);
+        const quantity = parseInt(qtyInput.value);
+        
+        if (!quantity || quantity <= 0) {
+            alert('Please enter a valid quantity');
+            return;
+        }
+        
+        if (action === 'buy') {
+            executeBuyOrder(symbol, price, quantity);
+        } else {
+            if (quantity > maxShares) {
+                alert(`You can only sell up to ${maxShares} shares`);
+                return;
+            }
+            executeSellOrder(symbol, price, quantity);
+        }
+    }
+
+    function executeBuyOrder(symbol, price, quantity) {
+        fetch(`https://weenstock.up.railway.app/api/stock/${symbol}/buy`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                quantity: quantity
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert(data.error);
+            } else {
+                location.reload();
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to execute buy order. Please try again.');
+        });
+    }
+
+    function executeSellOrder(symbol, price, quantity) {
+        fetch(`https://weenstock.up.railway.app/api/stock/${symbol}/sell`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                quantity: quantity
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert(data.error);
+            } else {
+                location.reload();
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to execute sell order. Please try again.');
+        });
+    }
+
+    function validateQtyInput(event) {
+        const key = event.key;
+        const isNumber = /[0-9]/.test(key);
+        const isControl = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(key);
+        
+        if (!isNumber && !isControl) {
+            event.preventDefault();
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         console.log('DOM loaded'); // Debug log
 
@@ -930,7 +1118,7 @@
         // Refresh leaderboard data
         async function refreshLeaderboardData() {
             try {
-                const response = await fetch('/leaderboard?format=json');
+                const response = await fetch('https://weenstock.up.railway.app/leaderboard?format=json');
                 if (response.ok) {
                     const data = await response.json();
                     const scrollPosition = document.querySelector('.leaderboard-content').scrollTop;
@@ -1142,23 +1330,23 @@
                 let aValue, bValue;
                 
                 switch(column) {
-                    case 'symbol':
+                    case 'instrument':
                         aValue = a.cells[0].textContent.trim();
                         bValue = b.cells[0].textContent.trim();
                         break;
-                    case 'quantity':
+                    case 'qty':
                         aValue = parseInt(a.cells[1].textContent);
                         bValue = parseInt(b.cells[1].textContent);
                         break;
-                    case 'cost':
-                    case 'price':
-                    case 'value':
+                    case 'avgcost':
+                    case 'ltp':
+                    case 'currentvalue':
                         aValue = parseFloat(a.cells[getColumnIndex(column)].textContent.replace('$', ''));
                         bValue = parseFloat(b.cells[getColumnIndex(column)].textContent.replace('$', ''));
                         break;
                     case 'pl':
-                    case 'net':
-                    case 'day':
+                    case 'netchg':
+                    case 'daychg':
                         aValue = parseFloat(a.cells[getColumnIndex(column)].textContent.replace('$', '').replace('%', ''));
                         bValue = parseFloat(b.cells[getColumnIndex(column)].textContent.replace('$', '').replace('%', ''));
                         break;
@@ -1178,12 +1366,12 @@
 
         function getColumnIndex(column) {
             switch(column) {
-                case 'cost': return 2;
-                case 'price': return 3;
-                case 'value': return 4;
+                case 'avgcost': return 2;
+                case 'ltp': return 3;
+                case 'currentvalue': return 4;
                 case 'pl': return 5;
-                case 'net': return 6;
-                case 'day': return 7;
+                case 'netchg': return 6;
+                case 'daychg': return 7;
                 default: return 0;
             }
         }
@@ -1193,6 +1381,17 @@
             header.addEventListener('click', () => {
                 const column = header.dataset.sort;
                 sortTable(column);
+            });
+        });
+
+        // Add event listeners for quantity inputs
+        document.querySelectorAll('.qty-input').forEach(input => {
+            input.addEventListener('keydown', validateQtyInput);
+            input.addEventListener('paste', (e) => {
+                const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+                if (!/^\d+$/.test(pastedText)) {
+                    e.preventDefault();
+                }
             });
         });
     });

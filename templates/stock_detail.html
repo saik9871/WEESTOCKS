@@ -1,0 +1,518 @@
+{% extends "base.html" %}
+
+{% block head %}
+<script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+<style>
+    .comment {
+        transition: all 0.3s ease;
+    }
+    .comment:hover {
+        transform: translateX(5px);
+    }
+    .reply-form {
+        display: none;
+    }
+    .reply-form.active {
+        display: block;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Stock Info Header -->
+    <div class="bg-black rounded-lg shadow-lg p-6 mb-8">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-100 mb-2">{{ stock.symbol }}</h1>
+                <p class="text-xl text-gray-300">{{ stock.name }}</p>
+            </div>
+            <div class="text-right">
+                <p class="text-2xl font-bold text-gray-100">${{ "%.2f"|format(stock.price) }}</p>
+                <p class="text-lg {% if stock.get_day_change() >= 0 %}text-green-500{% else %}text-red-500{% endif %}">
+                    {{ "%.2f"|format(stock.get_day_change()) }}%
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stock Graph -->
+    <div class="bg-black rounded-lg shadow-lg p-6 mb-8">
+        <div id="stockGraph" class="w-full h-[400px]"></div>
+    </div>
+
+    <!-- Trading Section -->
+    <div id="tradingSection" 
+         data-stock-price="{{ stock.price }}"
+         data-max-shares="{{ position.shares if position else 0 }}"
+         class="bg-black rounded-lg shadow-lg p-6 mb-8">
+        <div class="grid grid-cols-2 gap-8">
+            <!-- Buy Section -->
+            <div class="border border-gray-800 rounded-lg p-4">
+                <h3 class="text-xl font-bold text-gray-100 mb-4">Buy {{ stock.symbol }}</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-gray-400 mb-2">Quantity</label>
+                        <div class="flex items-center gap-2">
+                            <input type="number" 
+                                   id="buyQuantity" 
+                                   class="w-full bg-gray-900 text-gray-100 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-gray-600"
+                                   min="1"
+                                   placeholder="Enter quantity">
+                            <button onclick="updateBuyTotal()" 
+                                    class="px-4 py-3 bg-gray-900 text-gray-400 rounded-lg hover:bg-gray-800">
+                                Max
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 mb-2">Price per share</label>
+                        <div class="bg-gray-900 text-gray-100 rounded-lg p-3">${{ "%.2f"|format(stock.price) }}</div>
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 mb-2">Total Cost</label>
+                        <div id="buyTotal" class="bg-gray-900 text-gray-100 rounded-lg p-3">$0.00</div>
+                    </div>
+                    <button onclick="executeBuy()" 
+                            class="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg transition-colors duration-200">
+                        Buy Shares
+                    </button>
+                </div>
+            </div>
+
+            <!-- Sell Section -->
+            <div class="border border-gray-800 rounded-lg p-4">
+                <h3 class="text-xl font-bold text-gray-100 mb-4">Sell {{ stock.symbol }}</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-gray-400 mb-2">Quantity (Max: {{ position.shares if position else 0 }})</label>
+                        <div class="flex items-center gap-2">
+                            <input type="number" 
+                                   id="sellQuantity" 
+                                   class="w-full bg-gray-900 text-gray-100 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-gray-600"
+                                   min="1"
+                                   max="{{ position.shares if position else 0 }}"
+                                   placeholder="Enter quantity">
+                            <button onclick="updateSellTotal()" 
+                                    class="px-4 py-3 bg-gray-900 text-gray-400 rounded-lg hover:bg-gray-800">
+                                Max
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 mb-2">Price per share</label>
+                        <div class="bg-gray-900 text-gray-100 rounded-lg p-3">${{ "%.2f"|format(stock.price) }}</div>
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 mb-2">Total Value</label>
+                        <div id="sellTotal" class="bg-gray-900 text-gray-100 rounded-lg p-3">$0.00</div>
+                    </div>
+                    <button onclick="executeSell()" 
+                            class="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-lg transition-colors duration-200"
+                            {% if not position or position.shares == 0 %}disabled{% endif %}>
+                        Sell Shares
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Comments Section -->
+    <div class="bg-black rounded-lg shadow-lg p-6">
+        <h2 class="text-2xl font-bold text-gray-100 mb-6">Comments</h2>
+        
+        <!-- New Comment Form -->
+        <div class="mb-8">
+            <textarea id="newComment" rows="3" 
+                      class="w-full bg-gray-900 text-gray-100 rounded-lg p-3 mb-2 focus:outline-none focus:ring-2 focus:ring-gray-600"
+                      placeholder="Share your thoughts about {{ stock.symbol }}..."></textarea>
+            <button onclick="submitComment()" 
+                    class="bg-gray-700 hover:bg-gray-600 text-gray-100 px-4 py-2 rounded-lg transition-colors duration-200">
+                Post Comment
+            </button>
+        </div>
+
+        <!-- Comments List -->
+        <div id="commentsList" class="space-y-6">
+            {% for comment in comments %}
+            <div class="comment bg-gray-900 rounded-lg p-4" data-comment-id="{{ comment.id }}">
+                <div class="flex items-start space-x-4">
+                    {% if comment.user.twitch_profile_image %}
+                    <img src="{{ comment.user.twitch_profile_image }}" alt="{{ comment.user.username }}" 
+                         class="w-10 h-10 rounded-full">
+                    {% else %}
+                    <div class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center">
+                        <span class="text-gray-300 text-lg">{{ comment.user.username[0] | upper }}</span>
+                    </div>
+                    {% endif %}
+                    <div class="flex-1">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="font-medium text-gray-100">{{ comment.user.username }}</span>
+                            <span class="text-sm text-gray-400">{{ comment.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                        </div>
+                        <p class="text-gray-300">{{ comment.content }}</p>
+                        <button data-reply-id="{{ comment.id }}" 
+                                class="reply-button text-sm text-gray-400 hover:text-gray-300 mt-2">
+                            Reply
+                        </button>
+                        
+                        <!-- Reply Form -->
+                        <div class="reply-form mt-4" id="replyForm{{ comment.id }}">
+                            <textarea rows="2" 
+                                      class="w-full bg-gray-800 text-gray-100 rounded-lg p-2 mb-2 focus:outline-none focus:ring-2 focus:ring-gray-600"
+                                      placeholder="Write a reply..."></textarea>
+                            <button data-submit-reply="{{ comment.id }}"
+                                    class="bg-gray-700 hover:bg-gray-600 text-gray-100 px-3 py-1 rounded-lg text-sm transition-colors duration-200">
+                                Submit Reply
+                            </button>
+                        </div>
+
+                        <!-- Replies -->
+                        {% if comment.replies %}
+                        <div class="mt-4 ml-8 space-y-4">
+                            {% for reply in comment.replies %}
+                            <div class="bg-gray-800 rounded-lg p-3">
+                                <div class="flex items-start space-x-3">
+                                    {% if reply.user.twitch_profile_image %}
+                                    <img src="{{ reply.user.twitch_profile_image }}" alt="{{ reply.user.username }}" 
+                                         class="w-8 h-8 rounded-full">
+                                    {% else %}
+                                    <div class="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center">
+                                        <span class="text-gray-300">{{ reply.user.username[0] | upper }}</span>
+                                    </div>
+                                    {% endif %}
+                                    <div>
+                                        <div class="flex items-center space-x-2 mb-1">
+                                            <span class="font-medium text-gray-100">{{ reply.user.username }}</span>
+                                            <span class="text-sm text-gray-400">{{ reply.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                                        </div>
+                                        <p class="text-gray-300">{{ reply.content }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Initialize the stock graph
+const graphData = JSON.parse('{{ graph_data|tojson|safe }}');
+
+const trace = {
+    x: graphData.timestamps,
+    y: graphData.prices,
+    type: 'scatter',
+    mode: 'lines',
+    name: 'Price',
+    line: {
+        color: '#9CA3AF',
+        width: 2
+    }
+};
+
+const layout = {
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    xaxis: {
+        showgrid: true,
+        gridcolor: '#1F2937',
+        tickfont: { color: '#9CA3AF' },
+        title: { text: 'Time', font: { color: '#9CA3AF' } }
+    },
+    yaxis: {
+        showgrid: true,
+        gridcolor: '#1F2937',
+        tickfont: { color: '#9CA3AF' },
+        title: { text: 'Price ($)', font: { color: '#9CA3AF' } }
+    },
+    margin: { t: 20, r: 20, b: 40, l: 60 },
+    showlegend: false,
+    hovermode: 'x unified'
+};
+
+Plotly.newPlot('stockGraph', [trace], layout, { responsive: true });
+
+// Real-time updates
+function updateGraph() {
+    fetch(`/api/stock/{{ stock.symbol }}/history`)
+        .then(response => response.json())
+        .then(data => {
+            Plotly.update('stockGraph', {
+                x: [data.timestamps],
+                y: [data.prices]
+            });
+        });
+}
+
+// Update every 30 seconds
+setInterval(updateGraph, 30000);
+
+// Comment functions
+function submitComment() {
+    const content = document.getElementById('newComment').value;
+    if (!content.trim()) return;
+
+    fetch(`/api/stock/{{ stock.symbol }}/comment`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            content: content
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+        
+        // Add new comment to the list
+        const commentsList = document.getElementById('commentsList');
+        const newComment = createCommentElement(data);
+        commentsList.insertBefore(newComment, commentsList.firstChild);
+        
+        // Clear the input
+        document.getElementById('newComment').value = '';
+    });
+}
+
+function submitReply(parentId) {
+    const replyForm = document.getElementById(`replyForm${parentId}`);
+    const content = replyForm.querySelector('textarea').value;
+    if (!content.trim()) return;
+
+    fetch(`/api/stock/{{ stock.symbol }}/comment`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            content: content,
+            parent_id: parentId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+        
+        // Add new reply to the comment
+        const comment = document.querySelector(`[data-comment-id="${parentId}"]`);
+        let repliesContainer = comment.querySelector('.replies');
+        if (!repliesContainer) {
+            repliesContainer = document.createElement('div');
+            repliesContainer.className = 'mt-4 ml-8 space-y-4 replies';
+            comment.appendChild(repliesContainer);
+        }
+        
+        const newReply = createReplyElement(data);
+        repliesContainer.insertBefore(newReply, repliesContainer.firstChild);
+        
+        // Clear the input and hide the form
+        replyForm.querySelector('textarea').value = '';
+        replyForm.classList.remove('active');
+    });
+}
+
+function toggleReplyForm(commentId) {
+    const form = document.getElementById(`replyForm${commentId}`);
+    form.classList.toggle('active');
+}
+
+function createCommentElement(data) {
+    const div = document.createElement('div');
+    div.className = 'comment bg-gray-900 rounded-lg p-4';
+    div.setAttribute('data-comment-id', data.id);
+    
+    // Add comment HTML structure
+    div.innerHTML = `
+        <div class="flex items-start space-x-4">
+            ${data.profile_image 
+                ? `<img src="${data.profile_image}" alt="${data.username}" class="w-10 h-10 rounded-full">`
+                : `<div class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center">
+                    <span class="text-gray-300 text-lg">${data.username[0].toUpperCase()}</span>
+                   </div>`}
+            <div class="flex-1">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="font-medium text-gray-100">${data.username}</span>
+                    <span class="text-sm text-gray-400">${data.created_at}</span>
+                </div>
+                <p class="text-gray-300">${data.content}</p>
+                <button data-reply-id="${data.id}" 
+                        class="reply-button text-sm text-gray-400 hover:text-gray-300 mt-2">
+                    Reply
+                </button>
+                <div class="reply-form mt-4" id="replyForm${data.id}">
+                    <textarea rows="2" 
+                              class="w-full bg-gray-800 text-gray-100 rounded-lg p-2 mb-2 focus:outline-none focus:ring-2 focus:ring-gray-600"
+                              placeholder="Write a reply..."></textarea>
+                    <button data-submit-reply="${data.id}"
+                            class="bg-gray-700 hover:bg-gray-600 text-gray-100 px-3 py-1 rounded-lg text-sm transition-colors duration-200">
+                        Submit Reply
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    return div;
+}
+
+function createReplyElement(data) {
+    const div = document.createElement('div');
+    div.className = 'bg-gray-800 rounded-lg p-3';
+    
+    div.innerHTML = `
+        <div class="flex items-start space-x-3">
+            ${data.profile_image 
+                ? `<img src="${data.profile_image}" alt="${data.username}" class="w-8 h-8 rounded-full">`
+                : `<div class="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center">
+                    <span class="text-gray-300">${data.username[0].toUpperCase()}</span>
+                   </div>`}
+            <div>
+                <div class="flex items-center space-x-2 mb-1">
+                    <span class="font-medium text-gray-100">${data.username}</span>
+                    <span class="text-sm text-gray-400">${data.created_at}</span>
+                </div>
+                <p class="text-gray-300">${data.content}</p>
+            </div>
+        </div>
+    `;
+    
+    return div;
+}
+
+// Update event handlers
+document.addEventListener('click', function(e) {
+    // Handle reply button clicks
+    if (e.target.matches('.reply-button')) {
+        const commentId = e.target.dataset.replyId;
+        toggleReplyForm(commentId);
+    }
+    
+    // Handle submit reply clicks
+    if (e.target.matches('[data-submit-reply]')) {
+        const commentId = e.target.dataset.submitReply;
+        submitReply(commentId);
+    }
+});
+
+// Trading functions
+const STOCK_PRICE = Number('{{ stock.price }}');
+const MAX_SHARES = Number('{{ position.shares if position else 0 }}');
+
+function updateBuyTotal() {
+    const quantity = document.getElementById('buyQuantity');
+    const total = document.getElementById('buyTotal');
+    
+    if (quantity.value > 0) {
+        const totalCost = quantity.value * STOCK_PRICE;
+        total.textContent = `$${totalCost.toFixed(2)}`;
+    } else {
+        total.textContent = '$0.00';
+    }
+}
+
+function updateSellTotal() {
+    const quantity = document.getElementById('sellQuantity');
+    const total = document.getElementById('sellTotal');
+    
+    quantity.value = MAX_SHARES;
+    if (quantity.value > 0) {
+        const totalValue = quantity.value * STOCK_PRICE;
+        total.textContent = `$${totalValue.toFixed(2)}`;
+    } else {
+        total.textContent = '$0.00';
+    }
+}
+
+function executeBuy() {
+    const quantity = parseInt(document.getElementById('buyQuantity').value);
+    if (!quantity || quantity <= 0) {
+        alert('Please enter a valid quantity');
+        return;
+    }
+    
+    fetch(`/api/stock/{{ stock.symbol }}/buy`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            quantity: quantity
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+        } else {
+            location.reload();
+        }
+    });
+}
+
+function executeSell() {
+    const quantity = parseInt(document.getElementById('sellQuantity').value);
+    
+    if (!quantity || quantity <= 0) {
+        alert('Please enter a valid quantity');
+        return;
+    }
+    
+    if (quantity > MAX_SHARES) {
+        alert(`You can only sell up to ${MAX_SHARES} shares`);
+        return;
+    }
+    
+    fetch(`/api/stock/{{ stock.symbol }}/sell`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            quantity: quantity
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+        } else {
+            location.reload();
+        }
+    });
+}
+
+// Event listeners
+document.getElementById('buyQuantity').addEventListener('input', updateBuyTotal);
+document.getElementById('sellQuantity').addEventListener('input', updateSellTotal);
+
+// Add validation for quantity inputs
+function validateQtyInput(event) {
+    const key = event.key;
+    const isNumber = /[0-9]/.test(key);
+    const isControl = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(key);
+    
+    if (!isNumber && !isControl) {
+        event.preventDefault();
+    }
+}
+
+document.getElementById('buyQuantity').addEventListener('keydown', validateQtyInput);
+document.getElementById('sellQuantity').addEventListener('keydown', validateQtyInput);
+</script>
+{% endblock %} 
