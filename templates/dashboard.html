@@ -1019,17 +1019,24 @@
     }
 
     function executeBuyOrder(symbol, price, quantity) {
-        const formData = new FormData();
-        formData.append('symbol', symbol);
-        formData.append('quantity', quantity);
-        formData.append('action', 'buy');
-
         fetch('/trade', {
             method: 'POST',
-            body: formData
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({
+                symbol: symbol,
+                quantity: quantity,
+                action: 'buy'
+            })
         })
-        .then(response => response.text())
+        .then(response => {
+            console.log('Response status:', response.status); // Debug log
+            return response.text();
+        })
         .then(text => {
+            console.log('Response text:', text); // Debug log
             try {
                 const data = text ? JSON.parse(text) : {};
                 if (data.error) {
@@ -1049,17 +1056,24 @@
     }
 
     function executeSellOrder(symbol, price, quantity) {
-        const formData = new FormData();
-        formData.append('symbol', symbol);
-        formData.append('quantity', quantity);
-        formData.append('action', 'sell');
-
         fetch('/trade', {
             method: 'POST',
-            body: formData
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({
+                symbol: symbol,
+                quantity: quantity,
+                action: 'sell'
+            })
         })
-        .then(response => response.text())
+        .then(response => {
+            console.log('Response status:', response.status); // Debug log
+            return response.text();
+        })
         .then(text => {
+            console.log('Response text:', text); // Debug log
             try {
                 const data = text ? JSON.parse(text) : {};
                 if (data.error) {
