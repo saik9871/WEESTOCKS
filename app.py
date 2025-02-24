@@ -27,7 +27,7 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=31)  # Session lasts f
 # Twitch OAuth Configuration
 TWITCH_CLIENT_ID = 'shdewm91zxskpkg12fi3hphsfsajlc'
 TWITCH_CLIENT_SECRET = 'q4kuhmknmf7i56mxwz4tfkkad18av3'
-TWITCH_REDIRECT_URI = os.getenv('TWITCH_REDIRECT_URI', 'http://localhost:5000/auth/twitch/callback')
+TWITCH_REDIRECT_URI = 'https://weenstock.up.railway.app/auth/twitch/callback'  # Updated to production URL
 
 db = SQLAlchemy(app)
 
