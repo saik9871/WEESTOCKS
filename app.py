@@ -19,37 +19,37 @@ from sqlalchemy.pool import QueuePool
 # Load environment variables
 load_dotenv()
 
-# Debug print to verify database URL
-print("Using database URL:", os.getenv('DATABASE_URL', 'No DATABASE_URL found in environment'))
-
 app = Flask(__name__)
 
 # Enhanced session security
-app.config['SESSION_COOKIE_SECURE'] = True  # Only send cookies over HTTPS
-app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access to session cookie
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=31)
 
-# Enhanced database configuration
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'pool_size': 20,  # Increased from 10
-    'max_overflow': 30,  # Allow up to 30 additional connections
-    'pool_recycle': 1800,  # Recycle connections after 30 minutes
-    'pool_pre_ping': True,  # Check connection validity before using
-    'pool_timeout': 30,  # Wait up to 30 seconds for available connection
-    'poolclass': QueuePool
-}
+# Database configuration
+database_url = os.getenv('DATABASE_URL')
+if not database_url:
+    raise ValueError("No DATABASE_URL environment variable set")
 
-# Use DATABASE_URL from environment variables, fallback to SQLite for local development
-database_url = os.getenv('DATABASE_URL', 'postgresql://neondb_owner:npg_G9shViASrx8J@ep-late-unit-a80vzjan-pooler.eastus2.azure.neon.tech/neondb?sslmode=require')
 if database_url.startswith("postgres://"):
     database_url = database_url.replace("postgres://", "postgresql://", 1)
 
-print("Connecting to database:", database_url)  # Debug print to verify connection string
+print("Connecting to database:", database_url.split('@')[1] if '@' in database_url else 'database')  # Safe printing of DB URL
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-here')
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', secrets.token_hex(16))
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Enhanced database configuration
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_size': 20,
+    'max_overflow': 30,
+    'pool_recycle': 1800,
+    'pool_pre_ping': True,
+    'pool_timeout': 30,
+    'poolclass': QueuePool
+}
 
 # Twitch OAuth Configuration
 TWITCH_CLIENT_ID = 'shdewm91zxskpkg12fi3hphsfsajlc'
