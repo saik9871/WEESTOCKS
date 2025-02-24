@@ -3,499 +3,155 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WEENSTOCKS - Admin Panel</title>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
-        :root {
-            --black: #000000;
-            --dark-gray: #121212;
-            --gray: #333333;
-            --light-gray: #666666;
-            --text: #ffffff;
-            --accent: #888888;
-            --green: #00cc00;
-            --red: #cc0000;
-            --twitch: #6441a5;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Roboto', sans-serif;
-        }
-
-        body {
-            min-height: 100vh;
-            background: var(--black);
-            color: var(--text);
-        }
-
-        .admin-container {
-            display: grid;
-            grid-template-columns: 250px 1fr;
-            min-height: 100vh;
-        }
-
-        .sidebar {
-            background: var(--dark-gray);
-            padding: 2rem;
-            border-right: 1px solid var(--gray);
-            display: flex;
-            flex-direction: column;
-        }
-
-        .logo {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 1.8rem;
-            font-weight: 700;
-            color: var(--text);
-            margin-bottom: 1rem;
-        }
-
-        .admin-badge {
-            background: var(--gray);
-            color: var(--text);
-            padding: 0.5rem;
-            border-radius: 5px;
-            text-align: center;
-            margin-bottom: 3rem;
-            font-size: 0.9rem;
-        }
-
-        .back-btn {
-            background: var(--gray);
-            color: var(--text);
-            padding: 1rem;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 1rem;
-            transition: all 0.3s ease;
-            margin-bottom: 2rem;
-            text-decoration: none;
-            text-align: center;
-            border: none;
-        }
-
-        .back-btn:hover {
-            background: var(--light-gray);
-        }
-
-        .main-content {
-            padding: 2rem;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-            gap: 2rem;
-        }
-
-        .section {
-            background: var(--dark-gray);
-            border-radius: 5px;
-            padding: 2rem;
-        }
-
-        .section-title {
-            font-size: 1.5rem;
-            margin-bottom: 2rem;
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-
-        .section-title i {
-            color: var(--accent);
-        }
-
-        .form-group {
-            margin-bottom: 1.5rem;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: var(--accent);
-        }
-
-        .form-input {
-            width: 100%;
-            padding: 0.8rem;
-            background: var(--black);
-            border: 1px solid var(--gray);
-            border-radius: 5px;
-            color: var(--text);
-            margin-bottom: 1rem;
-        }
-
-        .form-input:focus {
-            outline: none;
-            border-color: var(--light-gray);
-        }
-
-        .submit-btn {
-            width: 100%;
-            padding: 1rem;
-            background: var(--gray);
-            color: var(--text);
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .submit-btn:hover {
-            background: var(--light-gray);
-        }
-
-        .user-list {
-            margin-top: 2rem;
-        }
-
-        .user-item {
-            display: grid;
-            grid-template-columns: auto 1fr auto auto;
-            gap: 1rem;
-            align-items: center;
-            padding: 1rem;
-            background: var(--black);
-            border-radius: 5px;
-            margin-bottom: 1rem;
-        }
-
-        .user-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            object-fit: cover;
-        }
-
-        .user-info {
-            display: flex;
-            flex-direction: column;
-            gap: 0.25rem;
-        }
-
-        .twitch-login {
-            color: var(--twitch);
-            font-size: 0.9rem;
-        }
-
-        .user-status {
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-        }
-
-        .status-badge {
-            padding: 0.25rem 0.5rem;
-            border-radius: 3px;
-            font-size: 0.8rem;
-        }
-
-        .status-badge.pending {
-            background: #cccc00;
-            color: var(--black);
-        }
-
-        .status-badge.approved {
-            background: var(--green);
-        }
-
-        .status-badge.admin {
-            background: var(--twitch);
-        }
-
-        .action-buttons {
-            display: flex;
-            gap: 0.5rem;
-        }
-
-        .approve-btn {
-            background: var(--green);
-            color: var(--text);
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .approve-btn.unapprove {
-            background: #cccc00;
-        }
-
-        .approve-btn:hover {
-            opacity: 0.9;
-        }
-
-        .stock-list {
-            margin-top: 2rem;
-        }
-
-        .stock-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem;
-            background: var(--black);
-            border-radius: 5px;
-            margin-bottom: 1rem;
-        }
-
-        .stock-info span {
-            color: var(--accent);
-            margin-left: 1rem;
-        }
-
-        .search-input {
-            width: 100%;
-            padding: 0.8rem;
-            background: var(--black);
-            border: 1px solid var(--gray);
-            border-radius: 5px;
-            color: var(--text);
-            margin-bottom: 1rem;
-        }
-
-        .notification {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 1rem;
-            border-radius: 5px;
-            background: var(--gray);
-            color: var(--text);
-            z-index: 1000;
-            animation: slideIn 0.3s ease;
-        }
-
-        @keyframes slideIn {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-
-        @media (max-width: 768px) {
-            .admin-container {
-                grid-template-columns: 1fr;
-            }
-
-            .sidebar {
-                position: fixed;
-                bottom: 0;
-                left: 0;
-                right: 0;
-                height: auto;
-                flex-direction: row;
-                align-items: center;
-                justify-content: space-between;
-                padding: 1rem;
-                z-index: 100;
-            }
-
-            .logo {
-                font-size: 1.2rem;
-                margin: 0;
-            }
-
-            .admin-badge {
-                margin: 0;
-            }
-
-            .back-btn {
-                margin: 0;
-            }
-
-            .main-content {
-                padding-bottom: 100px;
-                grid-template-columns: 1fr;
-            }
-        }
-
-        .delete-btn {
-            background: transparent;
-            border: 1px solid var(--red);
-            color: var(--red);
-            padding: 0.5rem 1rem;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .delete-btn:hover {
-            background: var(--red);
-            color: var(--text);
-        }
-
-        .delete-btn i {
-            margin-right: 5px;
-        }
-
-        .reset-btn {
-            background: #4a5568;
-            color: var(--text);
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .reset-btn:hover {
-            background: #2d3748;
-        }
-    </style>
+    <title>Admin Panel - WeeStocks</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
-    <div class="admin-container">
-        <aside class="sidebar">
-            <h1 class="logo">WEENSTOCKS</h1>
-            <div class="admin-badge">Admin Panel</div>
-            <a href="{{ url_for('dashboard') }}" class="back-btn">
-                <i class="fas fa-arrow-left"></i> Back to Dashboard
-            </a>
-        </aside>
-
-        <main class="main-content">
-            <div class="section">
-                <h2 class="section-title">
-                    <i class="fas fa-plus-circle"></i>
-                    Add New Stock
-                </h2>
-                <form action="{{ url_for('add_stock') }}" method="POST">
-                    <div class="form-group">
-                        <label for="name">Stock Name</label>
-                        <input type="text" id="name" name="name" class="form-input" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="symbol">Stock Symbol</label>
-                        <input type="text" id="symbol" name="symbol" class="form-input" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="price">Initial Price</label>
-                        <input type="number" id="price" name="price" step="0.01" class="form-input" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="quantity">Initial Quantity</label>
-                        <input type="number" id="quantity" name="quantity" min="1" class="form-input" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="description">Description (Optional)</label>
-                        <textarea id="description" name="description" class="form-input" rows="3"></textarea>
-                    </div>
-                    <button type="submit" class="submit-btn">Add Stock</button>
-                </form>
-
-                <div class="stocks-section">
-                    <h2>Current Stocks</h2>
-                    <table class="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Symbol</th>
-                                <th>Name</th>
-                                <th>Price</th>
-                                <th>Total Shares</th>
-                                <th>Shares Held</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for stock in stocks %}
-                            <tr>
-                                <td>{{ stock.symbol }}</td>
-                                <td>{{ stock.name }}</td>
-                                <td>${{ "%.2f"|format(stock.price) }}</td>
-                                <td>{{ stock.total_shares }}</td>
-                                <td>{{ stock.shares_held }}</td>
-                                <td>
-                                    <form action="{{ url_for('delete_stock', stock_id=stock.id) }}" method="POST" style="display: inline;">
-                                        <button type="submit" class="delete-btn" 
-                                                onclick="return confirm('Are you sure you want to delete {{ stock.symbol }}? This will also remove all related positions and history.')">
-                                            <i class="fas fa-trash"></i> Delete
-                                        </button>
-                                    </form>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('dashboard') }}">WeeStocks</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
+                <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
             </div>
+        </div>
+    </nav>
 
-            <div class="section">
-                <h2 class="section-title">
-                    <i class="fas fa-users-cog"></i>
-                    User Management
-                </h2>
-                <input type="text" class="search-input" placeholder="Search users..." onkeyup="filterUsers(this.value)">
-                <div class="user-list">
-                    {% for data in user_data %}
-                    <div class="user-item" data-username="{{ data.user.username.lower() }}">
-                        <img src="{{ data.user.twitch_profile_image }}" alt="{{ data.user.username }}" class="user-avatar">
-                        <div class="user-info">
-                            <div class="username">{{ data.user.username }}</div>
-                            <div class="twitch-login">
-                                <i class="fab fa-twitch"></i> {{ data.user.twitch_login }}
+    <div class="container mt-4">
+        <h1>Admin Panel</h1>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Add New Stock</h3>
+                    </div>
+                    <div class="card-body">
+                        <form action="{{ url_for('add_stock') }}" method="POST">
+                            <div class="mb-3">
+                                <label for="name" class="form-label">Stock Name</label>
+                                <input type="text" class="form-control" id="name" name="name" required>
                             </div>
-                            <div class="portfolio-value">{{ data.formatted_value }}</div>
-                        </div>
-                        <div class="user-status">
-                            {% if not data.user.is_approved %}
-                                <span class="status-badge pending">Pending</span>
-                            {% endif %}
-                            {% if data.user.is_admin %}
-                                <span class="status-badge admin">Admin</span>
-                            {% endif %}
-                        </div>
-                        <div class="action-buttons">
-                            {% if data.user.id != current_user.id %}
-                                <button onclick="approveUser({{ data.user.id }})" class="approve-btn {% if data.user.is_approved %}unapprove{% endif %}">
-                                    {{ 'Unapprove' if data.user.is_approved else 'Approve' }}
-                                </button>
-                                <button onclick="toggleAdmin({{ data.user.id }})" class="toggle-btn">
-                                    {{ 'Remove Admin' if data.user.is_admin else 'Make Admin' }}
-                                </button>
-                                <button onclick="resetBalance({{ data.user.id }})" class="reset-btn">
-                                    Reset Balance
-                                </button>
-                            {% endif %}
-                        </div>
+                            <div class="mb-3">
+                                <label for="symbol" class="form-label">Symbol</label>
+                                <input type="text" class="form-control" id="symbol" name="symbol" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="price" class="form-label">Initial Price</label>
+                                <input type="number" step="0.01" class="form-control" id="price" name="price" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Add Stock</button>
+                        </form>
                     </div>
-                    {% endfor %}
                 </div>
             </div>
-        </main>
+
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Manage Stocks</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Symbol</th>
+                                        <th>Name</th>
+                                        <th>Price</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for stock in stocks %}
+                                    <tr>
+                                        <td>{{ stock.symbol }}</td>
+                                        <td>{{ stock.name }}</td>
+                                        <td>${{ "%.2f"|format(stock.price) }}</td>
+                                        <td>
+                                            <form action="{{ url_for('delete_stock', stock_id=stock.id) }}" method="POST" style="display: inline;">
+                                                <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to delete this stock?')">Delete</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Manage Users</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Username</th>
+                                        <th>Portfolio Value</th>
+                                        <th>Admin Status</th>
+                                        <th>Stock Permission</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for data in user_data %}
+                                    <tr>
+                                        <td>{{ data.user.username }}</td>
+                                        <td>{{ data.formatted_value }}</td>
+                                        <td>
+                                            <button 
+                                                class="btn btn-sm {% if data.user.is_admin %}btn-success{% else %}btn-secondary{% endif %}"
+                                                onclick="toggleAdmin({{ data.user.id }})"
+                                                {% if data.user.id == current_user.id %}disabled{% endif %}
+                                            >
+                                                {% if data.user.is_admin %}Admin{% else %}Not Admin{% endif %}
+                                            </button>
+                                        </td>
+                                        <td>
+                                            <button 
+                                                class="btn btn-sm {% if data.user.can_add_stocks %}btn-success{% else %}btn-secondary{% endif %}"
+                                                onclick="togglePermission({{ data.user.id }})"
+                                            >
+                                                {% if data.user.can_add_stocks %}Can Add Stocks{% else %}Cannot Add Stocks{% endif %}
+                                            </button>
+                                        </td>
+                                        <td>
+                                            <button 
+                                                class="btn btn-sm {% if data.user.is_approved %}btn-success{% else %}btn-danger{% endif %}"
+                                                onclick="toggleApproval({{ data.user.id }})"
+                                            >
+                                                {% if data.user.is_approved %}Approved{% else %}Not Approved{% endif %}
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        function filterUsers(query) {
-            query = query.toLowerCase();
-            document.querySelectorAll('.user-item').forEach(item => {
-                const username = item.dataset.username;
-                item.style.display = username.includes(query) ? 'flex' : 'none';
-            });
-        }
-
-        function approveUser(userId) {
-            fetch(`/admin/approve_user/${userId}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        location.reload();
-                    } else {
-                        showNotification(data.message, true);
-                    }
-                })
-                .catch(error => {
-                    showNotification('Error updating user approval status', true);
-                });
-        }
-
         function toggleAdmin(userId) {
             fetch(`/admin/toggle_admin/${userId}`)
                 .then(response => response.json())
@@ -503,40 +159,33 @@
                     if (data.success) {
                         location.reload();
                     } else {
-                        showNotification(data.message, true);
+                        alert(data.message);
                     }
-                })
-                .catch(error => {
-                    showNotification('Error updating admin status', true);
                 });
         }
 
-        function resetBalance(userId) {
-            if (confirm('Are you sure you want to reset this user\'s balance to $500?')) {
-                fetch(`/admin/reset_balance/${userId}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            location.reload();
-                        } else {
-                            showNotification(data.message, true);
-                        }
-                    })
-                    .catch(error => {
-                        showNotification('Error resetting user balance', true);
-                    });
-            }
+        function togglePermission(userId) {
+            fetch(`/admin/toggle_permission/${userId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert(data.message);
+                    }
+                });
         }
 
-        function showNotification(message, isError = false) {
-            const notification = document.createElement('div');
-            notification.className = `notification ${isError ? 'error' : 'success'}`;
-            notification.textContent = message;
-            document.body.appendChild(notification);
-
-            setTimeout(() => {
-                notification.remove();
-            }, 3000);
+        function toggleApproval(userId) {
+            fetch(`/admin/approve_user/${userId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert(data.message);
+                    }
+                });
         }
     </script>
 </body>

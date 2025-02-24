@@ -648,23 +648,33 @@ def admin_required(f):
 @app.route('/admin')
 @admin_required
 def admin_panel():
-    users = User.query.all()
-    stocks = Stock.query.all()
-    
-    # Add portfolio values for each user
-    user_data = []
-    for user in users:
-        portfolio_value = calculate_portfolio_value(user.id)
-        user_data.append({
-            'user': user,
-            'portfolio_value': portfolio_value,
-            'formatted_value': f"${portfolio_value:,.2f}"
-        })
-    
-    return render_template('admin/dashboard.html', 
-                         user_data=user_data,
-                         stocks=stocks,
-                         current_user=User.query.get(session['user_id']))
+    try:
+        users = User.query.all()
+        stocks = Stock.query.all()
+        
+        # Add portfolio values for each user
+        user_data = []
+        for user in users:
+            try:
+                portfolio_value = calculate_portfolio_value(user.id)
+                user_data.append({
+                    'user': user,
+                    'portfolio_value': portfolio_value,
+                    'formatted_value': f"${portfolio_value:,.2f}"
+                })
+            except Exception as e:
+                print(f"Error calculating portfolio for user {user.id}: {str(e)}")
+                continue
+        
+        return render_template('admin.html',  # Changed from admin/dashboard.html
+                             user_data=user_data,
+                             stocks=stocks,
+                             current_user=User.query.get(session['user_id']))
+                             
+    except Exception as e:
+        print(f"Admin panel error: {str(e)}")
+        flash('Error loading admin panel', 'error')
+        return redirect(url_for('dashboard'))
 
 @app.route('/admin/add_stock', methods=['POST'])
 @admin_required
