@@ -21,6 +21,9 @@ import redis
 # Load environment variables
 load_dotenv()
 
+# Debug print to verify database URL
+print("Using database URL:", os.getenv('DATABASE_URL', 'No DATABASE_URL found in environment'))
+
 app = Flask(__name__)
 
 # Enhanced session security
@@ -43,6 +46,8 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
 database_url = os.getenv('DATABASE_URL', 'postgresql://neondb_owner:npg_G9shViASrx8J@ep-late-unit-a80vzjan-pooler.eastus2.azure.neon.tech/neondb?sslmode=require')
 if database_url.startswith("postgres://"):
     database_url = database_url.replace("postgres://", "postgresql://", 1)
+
+print("Connecting to database:", database_url)  # Debug print to verify connection string
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-here')
@@ -103,7 +108,7 @@ class User(db.Model):
     cash = db.Column(db.Float, nullable=False, default=500.0)
     is_admin = db.Column(db.Boolean, default=False)
     can_add_stocks = db.Column(db.Boolean, default=False)
-    is_approved = db.Column(db.Boolean, default=True)  # Changed to True
+    is_approved = db.Column(db.Boolean, default=True)
     registration_date = db.Column(db.DateTime, default=datetime.utcnow)
 
     @property
@@ -129,26 +134,28 @@ class Stock(db.Model):
     view_count = db.Column(db.Integer, default=0)
     trade_count = db.Column(db.Integer, default=0)
 
-    def get_day_change(self):
-        if self.previous_close == 0:
-            return 0
-        return ((self.price - self.previous_close) / self.previous_close) * 100
-
-    def get_net_change(self):
-        if self.initial_price == 0:
-            return 0
-        return ((self.price - self.initial_price) / self.initial_price) * 100
-
     def calculate_interest_score(self):
-        time_factor = 1.0
+        """
+        Calculate interest score using an exponential decay function for time
+        and logarithmic scaling for counts to prevent extreme values.
+        Time Complexity: O(1)
+        Space Complexity: O(1)
+        """
+        current_time = datetime.utcnow()
+        
+        # Time decay factor (exponential decay)
         if self.last_viewed:
-            hours_since_view = (datetime.utcnow() - self.last_viewed).total_seconds() / 3600
-            time_factor = max(0.1, 1.0 / (1 + hours_since_view))
+            hours_since_view = (current_time - self.last_viewed).total_seconds() / 3600
+            time_factor = math.exp(-0.1 * hours_since_view)  # Decay by ~10% per hour
+        else:
+            time_factor = 0.1  # Base factor for never-viewed stocks
         
-        view_weight = 0.4
-        trade_weight = 0.6
+        # Logarithmic scaling for view and trade counts to prevent extreme values
+        view_factor = math.log(self.view_count + 1, 2)  # log base 2
+        trade_factor = math.log(self.trade_count + 1, 2)
         
-        return ((self.view_count * view_weight) + (self.trade_count * trade_weight)) * time_factor
+        # Weighted combination (40% views, 60% trades)
+        return (0.4 * view_factor + 0.6 * trade_factor) * time_factor
 
 class Position(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -868,7 +875,6 @@ def make_first_user_admin():
     return redirect(url_for('dashboard'))
 
 @app.route('/predictions')
-@cache.cached(timeout=30, key_prefix='predictions_view')
 def predictions():
     if 'user_id' not in session:
         return redirect(url_for('login'))
@@ -876,47 +882,36 @@ def predictions():
     try:
         user = User.query.get(session['user_id'])
         if not user:
-            print("User not found in predictions route")
             return redirect(url_for('login'))
 
-        # Try to get active predictions from cache
-        active_predictions = cache.get(CACHE_KEYS['active_predictions'])
-        if active_predictions is None:
-            active_predictions = (Prediction.query
-                .filter_by(is_active=True)
-                .options(db.joinedload(Prediction.options))
-                .order_by(Prediction.created_at.desc())
-                .all())
-            cache.set(CACHE_KEYS['active_predictions'], active_predictions, timeout=30)
+        active_predictions = (Prediction.query
+            .filter_by(is_active=True)
+            .order_by(Prediction.created_at.desc())
+            .all())
 
         past_predictions = (Prediction.query
             .filter_by(is_active=False)
-            .options(db.joinedload(Prediction.options))
             .order_by(Prediction.created_at.desc())
             .limit(10)
             .all())
 
-        # Get user's bets from cache
-        cache_key = CACHE_KEYS['user_bets'].format(user.id)
-        user_bets = cache.get(cache_key)
-        if user_bets is None:
-            bets = Bet.query.filter_by(user_id=user.id).all()
-            user_bets = {bet.prediction_id: {
-                'option_id': bet.option_id,
-                'amount': bet.amount,
-                'is_settled': bet.is_settled,
-                'winnings': bet.winnings
-            } for bet in bets}
-            cache.set(cache_key, user_bets, timeout=60)
+        # Get user's bets
+        bets = Bet.query.filter_by(user_id=user.id).all()
+        user_bets = {bet.prediction_id: {
+            'option_id': bet.option_id,
+            'amount': bet.amount,
+            'is_settled': bet.is_settled,
+            'winnings': bet.winnings
+        } for bet in bets}
 
-        # Get user's votes efficiently
+        # Get user's votes
         user_votes = {vote.prediction_id: vote.option_id for vote in 
             Vote.query.filter_by(user_id=user.id).all()}
 
-        # Organize options by prediction_id
+        # Get options for each prediction
         prediction_options = {}
         for pred in active_predictions + past_predictions:
-            prediction_options[pred.id] = pred.options
+            prediction_options[pred.id] = PredictionOption.query.filter_by(prediction_id=pred.id).all()
 
         return render_template('predictions.html',
             user=user,
@@ -1025,36 +1020,16 @@ def place_bet():
     if not all([prediction_id, option_id, amount]) or amount <= 0:
         return jsonify({'error': 'Invalid bet parameters'}), 400
 
-    # Use Redis for distributed locking to prevent race conditions
-    lock_key = f"bet_lock_{prediction_id}_{session['user_id']}"
-    lock = redis_client.lock(lock_key, timeout=5)  # 5-second timeout
-    
     try:
-        have_lock = lock.acquire(blocking=True, blocking_timeout=2)
-        if not have_lock:
-            return jsonify({'error': 'Transaction in progress, please try again'}), 429
+        # Get prediction and option
+        prediction = Prediction.query.get(prediction_id)
+        option = PredictionOption.query.get(option_id)
+        user = User.query.get(session['user_id'])
 
-        # Rest of the existing bet placement logic...
-        prediction_data = db.session.query(
-            Prediction,
-            PredictionOption,
-            User
-        ).join(
-            PredictionOption, PredictionOption.prediction_id == Prediction.id
-        ).join(
-            User, User.id == session['user_id']
-        ).filter(
-            Prediction.id == prediction_id,
-            PredictionOption.id == option_id,
-            User.id == session['user_id']
-        ).first()
-
-        if not prediction_data:
+        if not prediction or not option:
             return jsonify({'error': 'Invalid prediction or option'}), 404
 
-        prediction, option, user = prediction_data
-
-        # Validate bet conditions...
+        # Validate bet conditions
         if not prediction.is_active or prediction.is_resolved:
             return jsonify({'error': 'This prediction is no longer accepting bets'}), 400
 
@@ -1064,7 +1039,8 @@ def place_bet():
         if user.cash < amount:
             return jsonify({'error': 'Insufficient funds'}), 400
 
-        existing_bet = db.session.query(Bet.id).filter_by(
+        # Check for existing bet
+        existing_bet = Bet.query.filter_by(
             user_id=user.id,
             prediction_id=prediction_id
         ).first()
@@ -1072,6 +1048,7 @@ def place_bet():
         if existing_bet:
             return jsonify({'error': 'You have already placed a bet on this prediction'}), 400
 
+        # Create bet
         bet = Bet(
             user_id=user.id,
             prediction_id=prediction_id,
@@ -1079,16 +1056,13 @@ def place_bet():
             amount=amount
         )
 
+        # Update user balance and prediction pool
         user.cash -= amount
         prediction.total_pool += amount
         option.total_bet_amount += amount
 
         db.session.add(bet)
         db.session.commit()
-
-        # Invalidate relevant caches
-        invalidate_user_cache(user.id)
-        invalidate_prediction_cache(prediction_id)
 
         return jsonify({
             'message': 'Bet placed successfully',
@@ -1098,9 +1072,6 @@ def place_bet():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
-    finally:
-        if 'lock' in locals() and have_lock:
-            lock.release()
 
 @app.route('/admin/resolve_prediction', methods=['POST'])
 @admin_required
@@ -1112,96 +1083,53 @@ def resolve_prediction():
     if not all([prediction_id, winning_option_id]):
         return jsonify({'error': 'Missing required fields'}), 400
 
-    # Use Redis for distributed locking
-    lock_key = f"resolve_prediction_{prediction_id}"
-    lock = redis_client.lock(lock_key, timeout=10)
-
     try:
-        have_lock = lock.acquire(blocking=True, blocking_timeout=5)
-        if not have_lock:
-            return jsonify({'error': 'Resolution in progress, please try again'}), 429
-
-        # Get prediction and winning option in a single query with FOR UPDATE lock
-        prediction_data = db.session.query(
-            Prediction,
-            PredictionOption
-        ).join(
-            PredictionOption, PredictionOption.id == winning_option_id
-        ).filter(
-            Prediction.id == prediction_id,
-            PredictionOption.prediction_id == prediction_id
-        ).with_for_update().first()
-
-        if not prediction_data:
-            return jsonify({'error': 'Invalid prediction or winning option'}), 404
-
-        prediction, winning_option = prediction_data
+        prediction = Prediction.query.get(prediction_id)
+        if not prediction:
+            return jsonify({'error': 'Prediction not found'}), 404
 
         if prediction.is_resolved:
             return jsonify({'error': 'Prediction is already resolved'}), 400
 
-        # Calculate winnings in a single query
+        winning_option = PredictionOption.query.get(winning_option_id)
+        if not winning_option:
+            return jsonify({'error': 'Invalid winning option'}), 404
+
+        # Calculate winnings
         total_pool = prediction.total_pool
         winning_pool = winning_option.total_bet_amount
 
         if winning_pool > 0:
-            # Calculate profit pool
+            # Get winning bets
+            winning_bets = Bet.query.filter_by(
+                prediction_id=prediction_id,
+                option_id=winning_option_id
+            ).all()
+
+            # Calculate profit pool (90% of losing bets)
             losing_pool = total_pool - winning_pool
             profit_pool = losing_pool * 0.9  # 10% house fee
 
-            # Prepare bulk updates for winning bets and user balances
-            winning_bets_data = db.session.query(
-                Bet,
-                User
-            ).join(
-                User, User.id == Bet.user_id
-            ).filter(
-                Bet.prediction_id == prediction_id,
-                Bet.option_id == winning_option_id
-            ).with_for_update().all()
-
-            # Prepare bulk updates
-            bet_updates = []
-            user_updates = []
-
-            for bet, user in winning_bets_data:
+            # Distribute winnings
+            for bet in winning_bets:
                 share = bet.amount / winning_pool
                 winnings = bet.amount + (profit_pool * share)
                 
-                bet_updates.append({
-                    'id': bet.id,
-                    'is_settled': True,
-                    'winnings': winnings
-                })
+                bet.is_settled = True
+                bet.winnings = winnings
                 
-                user_updates.append({
-                    'id': user.id,
-                    'cash_increment': winnings
-                })
+                # Update user balance
+                user = User.query.get(bet.user_id)
+                user.cash += winnings
 
-            # Execute bulk updates
-            if bet_updates:
-                db.session.bulk_update_mappings(Bet, bet_updates)
-            
-            if user_updates:
-                # Update user balances using raw SQL for better performance
-                update_users_sql = """
-                    UPDATE "user" 
-                    SET cash = cash + tmp.cash_increment 
-                    FROM (VALUES %s) AS tmp(id, cash_increment) 
-                    WHERE "user".id = tmp.id
-                """
-                values = [(u['id'], u['cash_increment']) for u in user_updates]
-                db.session.execute(update_users_sql, values)
-
-        # Update losing bets in bulk
-        db.session.query(Bet).filter(
+        # Mark losing bets as settled
+        Bet.query.filter(
             Bet.prediction_id == prediction_id,
             Bet.option_id != winning_option_id
         ).update({
             'is_settled': True,
             'winnings': 0
-        }, synchronize_session=False)
+        })
 
         # Update prediction
         prediction.is_resolved = True
@@ -1209,20 +1137,11 @@ def resolve_prediction():
         prediction.winning_option = winning_option_id
 
         db.session.commit()
-
-        # Invalidate relevant caches
-        invalidate_prediction_cache(prediction_id)
-        for bet, user in winning_bets_data:
-            invalidate_user_cache(user.id)
-
         return jsonify({'message': 'Prediction resolved successfully'})
 
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
-    finally:
-        if 'lock' in locals() and have_lock:
-            lock.release()
 
 @app.route('/admin/delete_prediction/<int:prediction_id>', methods=['POST'])
 @admin_required
@@ -1331,49 +1250,75 @@ def add_comment(symbol):
         return jsonify({'error': str(e)}), 500
 
 def update_stock_prices():
-    """Background task to update stock prices based on user interest"""
+    """
+    Background task to update stock prices based on user interest
+    Uses batch processing and efficient data structures
+    Time Complexity: O(n log n) where n is number of stocks
+    Space Complexity: O(n)
+    """
     try:
         with app.app_context():
-            stocks = Stock.query.with_for_update().all()  # Add row locking
+            # Get all stocks with a single query
+            stocks = Stock.query.with_for_update().all()
+            updates = []
+            histories = []
+            
+            current_time = datetime.utcnow()
+            
             for stock in stocks:
                 try:
+                    # Calculate interest score
                     interest_score = stock.calculate_interest_score()
-                    base_volatility = random.uniform(0.002, 0.015)
-                    volatility = base_volatility * (1 + min(1.5, interest_score / 10))
                     
-                    if random.random() < (interest_score / 15):
+                    # Use interest score to determine update probability
+                    if random.random() < (interest_score / 10):  # Normalized probability
+                        # Calculate volatility based on interest
+                        base_volatility = 0.002  # 0.2% base volatility
+                        max_volatility = 0.015   # 1.5% max volatility
+                        
+                        # Sigmoid function for smooth volatility scaling
+                        volatility = base_volatility + (max_volatility - base_volatility) * (
+                            1 / (1 + math.exp(-2 * (interest_score - 2)))
+                        )
+                        
+                        # Calculate price change
                         change_percentage = random.uniform(-volatility, volatility)
                         old_price = stock.price
                         new_price = old_price * (1 + change_percentage)
                         
-                        # Enhanced bounds checking
+                        # Apply price bounds
                         min_price = max(0.01, stock.initial_price * 0.2)
                         max_price = stock.initial_price * 5
                         new_price = max(min_price, min(max_price, new_price))
                         
+                        # Prepare updates
                         stock.previous_close = stock.price
                         stock.price = new_price
                         
-                        price_change = ((new_price - old_price) / old_price) * 100
-                        volume = int(max(10, interest_score * 50))
+                        # Calculate trading volume based on interest
+                        volume = int(10 + interest_score * 20)  # Base volume + interest-based volume
                         
+                        # Create history record
                         history = StockHistory(
                             stock_id=stock.id,
                             price=new_price,
-                            price_change=price_change,
-                            volume=volume
+                            price_change=((new_price - old_price) / old_price) * 100,
+                            volume=volume,
+                            timestamp=current_time
                         )
-                        db.session.add(history)
+                        histories.append(history)
                         
                 except Exception as e:
                     print(f"Error updating stock {stock.symbol}: {str(e)}")
-                    db.session.rollback()
                     continue
             
             try:
+                # Batch insert histories
+                if histories:
+                    db.session.bulk_save_objects(histories)
                 db.session.commit()
             except Exception as e:
-                print(f"Error committing stock updates: {str(e)}")
+                print(f"Error committing updates: {str(e)}")
                 db.session.rollback()
     
     except Exception as e:
@@ -1383,13 +1328,15 @@ def create_scheduler():
     """Create and configure the scheduler with proper error handling"""
     try:
         scheduler = BackgroundScheduler(
-            daemon=True,  # Run as daemon thread
+            daemon=True,
             job_defaults={
                 'coalesce': True,
                 'max_instances': 1,
                 'misfire_grace_time': 15
             }
         )
+        
+        # Add the stock update job
         scheduler.add_job(
             func=update_stock_prices,
             trigger="interval",
@@ -1403,11 +1350,11 @@ def create_scheduler():
                     scheduler.shutdown(wait=False)
             except:
                 pass
-                
-        atexit.register(cleanup)
         
+        atexit.register(cleanup)
         scheduler.start()
         return scheduler
+        
     except Exception as e:
         print(f"Error creating scheduler: {str(e)}")
         return None
