@@ -184,13 +184,25 @@ def add_column(engine, table_name, column):
 with app.app_context():
     inspector = inspect(db.engine)
     
-    # Create all tables first
-    db.create_all()
-    
-    # Check if columns exist and add them if they don't
-    existing_columns = [column['name'] for column in inspector.get_columns('stock')]
-    
     try:
+        # Create all tables first
+        db.create_all()
+        print("All database tables created successfully")
+        
+        # Check if prediction-related tables exist
+        tables = inspector.get_table_names()
+        required_tables = ['prediction', 'prediction_option', 'vote', 'bet']
+        missing_tables = [table for table in required_tables if table not in tables]
+        
+        if missing_tables:
+            print(f"Missing tables detected: {missing_tables}")
+            # Force create missing tables
+            db.create_all()
+            print("Attempted to create missing tables")
+        
+        # Check if columns exist and add them if they don't
+        existing_columns = [column['name'] for column in inspector.get_columns('stock')]
+        
         if 'last_viewed' not in existing_columns:
             db.session.execute(text('ALTER TABLE stock ADD COLUMN IF NOT EXISTS last_viewed TIMESTAMP'))
         if 'view_count' not in existing_columns:
@@ -198,56 +210,23 @@ with app.app_context():
         if 'trade_count' not in existing_columns:
             db.session.execute(text('ALTER TABLE stock ADD COLUMN IF NOT EXISTS trade_count INTEGER DEFAULT 0'))
         
+        # Check prediction table columns
+        prediction_columns = [column['name'] for column in inspector.get_columns('prediction')]
+        if 'total_pool' not in prediction_columns:
+            db.session.execute(text('ALTER TABLE prediction ADD COLUMN IF NOT EXISTS total_pool FLOAT NOT NULL DEFAULT 0.0'))
+        
+        # Check prediction_option table columns
+        option_columns = [column['name'] for column in inspector.get_columns('prediction_option')]
+        if 'total_bet_amount' not in option_columns:
+            db.session.execute(text('ALTER TABLE prediction_option ADD COLUMN IF NOT EXISTS total_bet_amount FLOAT NOT NULL DEFAULT 0.0'))
+        
         db.session.commit()
+        print("Database initialization completed successfully")
+        
     except Exception as e:
-        print(f"Error adding columns: {str(e)}")
+        print(f"Error during database initialization: {str(e)}")
         db.session.rollback()
-    
-    # Add initial stocks only if the stocks table is empty
-    if not Stock.query.first():
-        initial_stocks = [
-            Stock(
-                symbol='BAJAJST',
-                name='Bajaj Stock',
-                price=930.00,
-                total_shares=1000000,
-                shares_held=0,
-                previous_close=836.48,
-                initial_price=301.71,
-                view_count=0,
-                trade_count=0
-            ),
-            Stock(
-                symbol='TITANBIO',
-                name='Titan Bio Corp',
-                price=811.90,
-                total_shares=1000000,
-                shares_held=0,
-                previous_close=790.82,
-                initial_price=466.05,
-                view_count=0,
-                trade_count=0
-            ),
-            Stock(
-                symbol='SURAJ',
-                name='Suraj Limited',
-                price=499.20,
-                total_shares=1000000,
-                shares_held=0,
-                previous_close=493.82,
-                initial_price=431.89,
-                view_count=0,
-                trade_count=0
-            )
-        ]
-        for stock in initial_stocks:
-            db.session.add(stock)
-        try:
-            db.session.commit()
-            print("Initial stocks added to database")
-        except Exception as e:
-            print(f"Error adding initial stocks: {str(e)}")
-            db.session.rollback()
+        raise
 
 def calculate_new_price(current_price, quantity, is_buy):
     # Base impact uses a sigmoid function to create diminishing returns for large quantities
@@ -837,44 +816,57 @@ def predictions():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    user = User.query.get(session['user_id'])
-    if not user:
-        return redirect(url_for('login'))
+    try:
+        user = User.query.get(session['user_id'])
+        if not user:
+            print("User not found in predictions route")
+            return redirect(url_for('login'))
 
-    # Get active and past predictions
-    active_predictions = Prediction.query.filter_by(is_active=True).order_by(Prediction.created_at.desc()).all()
-    past_predictions = Prediction.query.filter_by(is_active=False).order_by(Prediction.created_at.desc()).limit(10).all()
+        # Get active and past predictions
+        active_predictions = Prediction.query.filter_by(is_active=True).order_by(Prediction.created_at.desc()).all()
+        print(f"Found {len(active_predictions)} active predictions")
+        
+        past_predictions = Prediction.query.filter_by(is_active=False).order_by(Prediction.created_at.desc()).limit(10).all()
+        print(f"Found {len(past_predictions)} past predictions")
 
-    # Get all options for each prediction
-    prediction_options = {}
-    for prediction in active_predictions + past_predictions:
-        prediction_options[prediction.id] = PredictionOption.query.filter_by(prediction_id=prediction.id).all()
+        # Get all options for each prediction
+        prediction_options = {}
+        for prediction in active_predictions + past_predictions:
+            options = PredictionOption.query.filter_by(prediction_id=prediction.id).all()
+            prediction_options[prediction.id] = options
+            print(f"Found {len(options)} options for prediction {prediction.id}")
 
-    # Get user's votes
-    user_votes = {}
-    votes = Vote.query.filter_by(user_id=user.id).all()
-    for vote in votes:
-        user_votes[vote.prediction_id] = vote.option_id
+        # Get user's votes
+        user_votes = {}
+        votes = Vote.query.filter_by(user_id=user.id).all()
+        for vote in votes:
+            user_votes[vote.prediction_id] = vote.option_id
+        print(f"Found {len(votes)} votes for user")
 
-    # Get user's bets
-    user_bets = {}
-    bets = Bet.query.filter_by(user_id=user.id).all()
-    for bet in bets:
-        user_bets[bet.prediction_id] = {
-            'option_id': bet.option_id,
-            'amount': bet.amount,
-            'is_settled': bet.is_settled,
-            'winnings': bet.winnings
-        }
+        # Get user's bets
+        user_bets = {}
+        bets = Bet.query.filter_by(user_id=user.id).all()
+        for bet in bets:
+            user_bets[bet.prediction_id] = {
+                'option_id': bet.option_id,
+                'amount': bet.amount,
+                'is_settled': bet.is_settled,
+                'winnings': bet.winnings
+            }
+        print(f"Found {len(bets)} bets for user")
 
-    return render_template('predictions.html',
-        user=user,
-        active_predictions=active_predictions,
-        past_predictions=past_predictions,
-        prediction_options=prediction_options,
-        user_votes=user_votes,
-        user_bets=user_bets
-    )
+        return render_template('predictions.html',
+            user=user,
+            active_predictions=active_predictions,
+            past_predictions=past_predictions,
+            prediction_options=prediction_options,
+            user_votes=user_votes,
+            user_bets=user_bets
+        )
+    except Exception as e:
+        print(f"Error in predictions route: {str(e)}")
+        db.session.rollback()
+        return "An error occurred: " + str(e), 500
 
 @app.route('/admin/create_prediction', methods=['POST'])
 @admin_required
