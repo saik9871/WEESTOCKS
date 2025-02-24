@@ -44,7 +44,7 @@
     <!-- Trading Section -->
     <div id="tradingSection" 
          data-stock-price="{{ stock.price }}"
-         data-max-shares="{{ position.shares if position else 0 }}"
+         data-max-shares="{{ position.shares if position and position.shares else 0 }}"
          class="bg-black rounded-lg shadow-lg p-6 mb-8">
         <div class="grid grid-cols-2 gap-8">
             <!-- Buy Section -->
@@ -85,13 +85,13 @@
                 <h3 class="text-xl font-bold text-gray-100 mb-4">Sell {{ stock.symbol }}</h3>
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-gray-400 mb-2">Quantity (Max: {{ position.shares if position else 0 }})</label>
+                        <label class="block text-gray-400 mb-2">Quantity (Max: {{ position.shares if position and position.shares else 0 }})</label>
                         <div class="flex items-center gap-2">
                             <input type="number" 
                                    id="sellQuantity" 
                                    class="w-full bg-gray-900 text-gray-100 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-gray-600"
                                    min="1"
-                                   max="{{ position.shares if position else 0 }}"
+                                   max="{{ position.shares if position and position.shares else 0 }}"
                                    placeholder="Enter quantity">
                             <button onclick="updateSellTotal()" 
                                     class="px-4 py-3 bg-gray-900 text-gray-400 rounded-lg hover:bg-gray-800">
@@ -412,7 +412,7 @@ document.addEventListener('click', function(e) {
 
 // Trading functions
 const STOCK_PRICE = Number('{{ stock.price }}');
-const MAX_SHARES = Number('{{ position.shares if position else 0 }}');
+const MAX_SHARES = Number('{{ position.shares if position and position.shares else 0 }}');
 
 function updateBuyTotal() {
     const quantity = document.getElementById('buyQuantity');
@@ -430,7 +430,6 @@ function updateSellTotal() {
     const quantity = document.getElementById('sellQuantity');
     const total = document.getElementById('sellTotal');
     
-    quantity.value = MAX_SHARES;
     if (quantity.value > 0) {
         const totalValue = quantity.value * STOCK_PRICE;
         total.textContent = `$${totalValue.toFixed(2)}`;
@@ -446,16 +445,26 @@ function executeBuy() {
         return;
     }
     
-    const formData = new FormData();
-    formData.append('symbol', '{{ stock.symbol }}');
-    formData.append('quantity', quantity);
-    formData.append('action', 'buy');
+    const form = new FormData();
+    form.append('symbol', '{{ stock.symbol }}');
+    form.append('quantity', quantity);
+    form.append('action', 'buy');
 
     fetch('/trade', {
         method: 'POST',
-        body: formData
+        body: form,
+        headers: {
+            'Accept': 'application/json'
+        }
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.text().then(text => {
+            return text ? JSON.parse(text) : {}
+        });
+    })
     .then(data => {
         if (data.error) {
             alert(data.error);
@@ -482,16 +491,26 @@ function executeSell() {
         return;
     }
     
-    const formData = new FormData();
-    formData.append('symbol', '{{ stock.symbol }}');
-    formData.append('quantity', quantity);
-    formData.append('action', 'sell');
+    const form = new FormData();
+    form.append('symbol', '{{ stock.symbol }}');
+    form.append('quantity', quantity);
+    form.append('action', 'sell');
 
     fetch('/trade', {
         method: 'POST',
-        body: formData
+        body: form,
+        headers: {
+            'Accept': 'application/json'
+        }
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.text().then(text => {
+            return text ? JSON.parse(text) : {}
+        });
+    })
     .then(data => {
         if (data.error) {
             alert(data.error);
@@ -522,5 +541,11 @@ function validateQtyInput(event) {
 
 document.getElementById('buyQuantity').addEventListener('keydown', validateQtyInput);
 document.getElementById('sellQuantity').addEventListener('keydown', validateQtyInput);
+
+// Initialize totals
+document.addEventListener('DOMContentLoaded', function() {
+    updateBuyTotal();
+    updateSellTotal();
+});
 </script>
 {% endblock %} 
