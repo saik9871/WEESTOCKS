@@ -450,9 +450,10 @@ function executeBuy() {
     formData.append('quantity', quantity);
     formData.append('action', 'buy');
 
-    fetch('https://weenstock.up.railway.app/trade', {
+    fetch('/trade', {  // Use relative URL
         method: 'POST',
-        body: formData
+        body: formData,
+        credentials: 'include'
     })
     .then(response => {
         console.log('Response status:', response.status);
@@ -463,9 +464,6 @@ function executeBuy() {
     })
     .then(text => {
         console.log('Response text:', text);
-        if (text.includes('Bad Request')) {
-            throw new Error('Server rejected the request');
-        }
         try {
             const data = text ? JSON.parse(text) : {};
             if (data.error) {
@@ -475,6 +473,7 @@ function executeBuy() {
             }
         } catch (e) {
             console.error('Error parsing response:', e);
+            console.log('Raw response:', text);
             alert('Failed to execute buy order. Please try again.');
         }
     })
@@ -502,9 +501,10 @@ function executeSell() {
     formData.append('quantity', quantity);
     formData.append('action', 'sell');
 
-    fetch('https://weenstock.up.railway.app/trade', {
+    fetch('/trade', {  // Use relative URL
         method: 'POST',
-        body: formData
+        body: formData,
+        credentials: 'include'
     })
     .then(response => {
         console.log('Response status:', response.status);
@@ -515,9 +515,6 @@ function executeSell() {
     })
     .then(text => {
         console.log('Response text:', text);
-        if (text.includes('Bad Request')) {
-            throw new Error('Server rejected the request');
-        }
         try {
             const data = text ? JSON.parse(text) : {};
             if (data.error) {
@@ -527,6 +524,7 @@ function executeSell() {
             }
         } catch (e) {
             console.error('Error parsing response:', e);
+            console.log('Raw response:', text);
             alert('Failed to execute sell order. Please try again.');
         }
     })

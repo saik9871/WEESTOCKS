@@ -1019,24 +1019,25 @@
     }
 
     function executeBuyOrder(symbol, price, quantity) {
-        fetch('/trade', {
+        const formData = new FormData();
+        formData.append('symbol', symbol);
+        formData.append('quantity', quantity);
+        formData.append('action', 'buy');
+
+        fetch('/trade', {  // Use relative URL
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            },
-            body: JSON.stringify({
-                symbol: symbol,
-                quantity: quantity,
-                action: 'buy'
-            })
+            body: formData,
+            credentials: 'include'
         })
         .then(response => {
-            console.log('Response status:', response.status); // Debug log
+            console.log('Response status:', response.status);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
             return response.text();
         })
         .then(text => {
-            console.log('Response text:', text); // Debug log
+            console.log('Response text:', text);
             try {
                 const data = text ? JSON.parse(text) : {};
                 if (data.error) {
@@ -1046,6 +1047,7 @@
                 }
             } catch (e) {
                 console.error('Error parsing response:', e);
+                console.log('Raw response:', text);
                 alert('Failed to execute buy order. Please try again.');
             }
         })
@@ -1056,24 +1058,25 @@
     }
 
     function executeSellOrder(symbol, price, quantity) {
-        fetch('/trade', {
+        const formData = new FormData();
+        formData.append('symbol', symbol);
+        formData.append('quantity', quantity);
+        formData.append('action', 'sell');
+
+        fetch('/trade', {  // Use relative URL
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            },
-            body: JSON.stringify({
-                symbol: symbol,
-                quantity: quantity,
-                action: 'sell'
-            })
+            body: formData,
+            credentials: 'include'
         })
         .then(response => {
-            console.log('Response status:', response.status); // Debug log
+            console.log('Response status:', response.status);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
             return response.text();
         })
         .then(text => {
-            console.log('Response text:', text); // Debug log
+            console.log('Response text:', text);
             try {
                 const data = text ? JSON.parse(text) : {};
                 if (data.error) {
@@ -1083,6 +1086,7 @@
                 }
             } catch (e) {
                 console.error('Error parsing response:', e);
+                console.log('Raw response:', text);
                 alert('Failed to execute sell order. Please try again.');
             }
         })
