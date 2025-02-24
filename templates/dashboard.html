@@ -1019,14 +1019,14 @@
     }
 
     function executeBuyOrder(symbol, price, quantity) {
-        fetch(`https://weenstock.up.railway.app/api/stock/${symbol}/buy`, {
+        const formData = new FormData();
+        formData.append('symbol', symbol);
+        formData.append('quantity', quantity);
+        formData.append('action', 'buy');
+
+        fetch('/trade', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                quantity: quantity
-            })
+            body: formData
         })
         .then(response => response.json())
         .then(data => {
@@ -1043,14 +1043,14 @@
     }
 
     function executeSellOrder(symbol, price, quantity) {
-        fetch(`https://weenstock.up.railway.app/api/stock/${symbol}/sell`, {
+        const formData = new FormData();
+        formData.append('symbol', symbol);
+        formData.append('quantity', quantity);
+        formData.append('action', 'sell');
+
+        fetch('/trade', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                quantity: quantity
-            })
+            body: formData
         })
         .then(response => response.json())
         .then(data => {

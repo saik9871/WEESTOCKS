@@ -446,14 +446,14 @@ function executeBuy() {
         return;
     }
     
-    fetch(`/api/stock/{{ stock.symbol }}/buy`, {
+    const formData = new FormData();
+    formData.append('symbol', '{{ stock.symbol }}');
+    formData.append('quantity', quantity);
+    formData.append('action', 'buy');
+
+    fetch('/trade', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            quantity: quantity
-        })
+        body: formData
     })
     .then(response => response.json())
     .then(data => {
@@ -462,6 +462,10 @@ function executeBuy() {
         } else {
             location.reload();
         }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to execute buy order. Please try again.');
     });
 }
 
@@ -478,14 +482,14 @@ function executeSell() {
         return;
     }
     
-    fetch(`/api/stock/{{ stock.symbol }}/sell`, {
+    const formData = new FormData();
+    formData.append('symbol', '{{ stock.symbol }}');
+    formData.append('quantity', quantity);
+    formData.append('action', 'sell');
+
+    fetch('/trade', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            quantity: quantity
-        })
+        body: formData
     })
     .then(response => response.json())
     .then(data => {
@@ -494,6 +498,10 @@ function executeSell() {
         } else {
             location.reload();
         }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to execute sell order. Please try again.');
     });
 }
 
