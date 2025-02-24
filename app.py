@@ -10,6 +10,9 @@ import requests
 from urllib.parse import urlencode
 from requests_oauthlib import OAuth2Session
 import secrets
+import random
+from apscheduler.schedulers.background import BackgroundScheduler
+from sqlalchemy import func, desc
 
 # Load environment variables
 load_dotenv()
@@ -64,8 +67,12 @@ class Stock(db.Model):
     price = db.Column(db.Float, nullable=False)
     total_shares = db.Column(db.Integer, nullable=False)
     shares_held = db.Column(db.Integer, nullable=False)
-    previous_close = db.Column(db.Float, nullable=False, default=0.0)  # For day change calculation
-    initial_price = db.Column(db.Float, nullable=False)  # For net change calculation
+    previous_close = db.Column(db.Float, nullable=False, default=0.0)
+    initial_price = db.Column(db.Float, nullable=False)
+    last_viewed = db.Column(db.DateTime, nullable=True)  # Track when stock was last viewed
+    view_count = db.Column(db.Integer, default=0)  # Track number of views
+    trade_count = db.Column(db.Integer, default=0)  # Track number of trades
+    comment_count = db.Column(db.Integer, default=0)  # Track number of comments
 
     def get_day_change(self):
         if self.previous_close == 0:
@@ -76,6 +83,26 @@ class Stock(db.Model):
         if self.initial_price == 0:
             return 0
         return ((self.price - self.initial_price) / self.initial_price) * 100
+
+    def calculate_interest_score(self):
+        # Calculate how recent the last view was (if any)
+        time_factor = 1.0
+        if self.last_viewed:
+            hours_since_view = (datetime.utcnow() - self.last_viewed).total_seconds() / 3600
+            time_factor = max(0.1, 1.0 / (1 + hours_since_view))  # Decay over time
+
+        # Combine various factors with weights
+        view_weight = 0.3
+        trade_weight = 0.5
+        comment_weight = 0.2
+
+        interest_score = (
+            (self.view_count * view_weight) +
+            (self.trade_count * trade_weight) +
+            (self.comment_count * comment_weight)
+        ) * time_factor
+
+        return interest_score
 
 class Position(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -129,16 +156,6 @@ class Comment(db.Model):
     # Relationships
     user = db.relationship('User', backref='comments')
     replies = db.relationship('Comment', backref=db.backref('parent', remote_side=[id]))
-
-# Add this model for bot configuration
-class BotConfig(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    access_token = db.Column(db.String(255))
-    refresh_token = db.Column(db.String(255))
-    token_expires_at = db.Column(db.DateTime)
-    channel_name = db.Column(db.String(100), default='JasonTheWeen')
-    is_active = db.Column(db.Boolean, default=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 # Initialize database and add initial stocks only if they don't exist
 with app.app_context():
@@ -480,6 +497,7 @@ def trade():
             position.shares += quantity
             stock.shares_held += quantity
             stock.price = calculate_new_price(stock.price, quantity, True)
+            stock.trade_count += 1  # Increment trade count
             
             # Record trade history
             price_change = ((stock.price - old_price) / old_price) * 100
@@ -503,6 +521,7 @@ def trade():
             position.shares -= quantity
             stock.shares_held -= quantity
             stock.price = calculate_new_price(stock.price, quantity, False)
+            stock.trade_count += 1  # Increment trade count
             
             # Record trade history
             price_change = ((stock.price - old_price) / old_price) * 100
@@ -591,17 +610,9 @@ def admin_panel():
             'formatted_value': f"${portfolio_value:,.2f}"
         })
     
-    # Get bot status
-    bot_config = BotConfig.query.first()
-    bot_status = {
-        'is_configured': bool(bot_config and bot_config.access_token),
-        'last_updated': bot_config.updated_at if bot_config else None
-    }
-    
     return render_template('admin/dashboard.html', 
                          user_data=user_data,
                          stocks=stocks,
-                         bot_status=bot_status,
                          current_user=User.query.get(session['user_id']))
 
 @app.route('/admin/add_stock', methods=['POST'])
@@ -908,6 +919,11 @@ def stock_detail(symbol):
     stock = Stock.query.filter_by(symbol=symbol).first_or_404()
     user = User.query.get(session['user_id'])
     
+    # Update view statistics
+    stock.view_count += 1
+    stock.last_viewed = datetime.utcnow()
+    db.session.commit()
+    
     # Get stock history for the graph
     history = StockHistory.query.filter_by(stock_id=stock.id)\
         .order_by(StockHistory.timestamp.desc())\
@@ -967,6 +983,7 @@ def add_comment(symbol):
             parent_id=data.get('parent_id')
         )
         db.session.add(comment)
+        stock.comment_count += 1  # Increment comment count
         db.session.commit()
         
         return jsonify({
@@ -980,145 +997,51 @@ def add_comment(symbol):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
-# Add these routes for bot authentication
-@app.route('/admin/bot/auth')
-@admin_required
-def bot_auth():
-    """Start the bot authentication process"""
-    try:
-        # Generate state token for security
-        state = secrets.token_hex(16)
-        session['oauth_state'] = state
-        
-        # Define OAuth parameters
-        params = {
-            'client_id': TWITCH_CLIENT_ID,
-            'redirect_uri': 'https://weenstock.up.railway.app/auth/bot/callback',
-            'response_type': 'code',
-            'scope': 'chat:read chat:edit',
-            'state': state,
-            'force_verify': 'true'
-        }
-        
-        # Construct auth URL
-        auth_url = f"https://id.twitch.tv/oauth2/authorize?{urlencode(params)}"
-        
-        return render_template('admin/bot_auth.html', auth_url=auth_url)
-        
-    except Exception as e:
-        flash(f'Error initiating bot authentication: {str(e)}', 'error')
-        return redirect(url_for('admin_panel'))
-
-@app.route('/auth/bot/callback')
-@admin_required
-def bot_callback():
-    """Handle the callback from Twitch OAuth"""
-    try:
-        # Verify state
-        state = request.args.get('state')
-        if state != session.get('oauth_state'):
-            flash('Invalid state parameter', 'error')
-            return redirect(url_for('admin_panel'))
-        
-        # Get authorization code
-        code = request.args.get('code')
-        if not code:
-            flash('No authorization code received', 'error')
-            return redirect(url_for('admin_panel'))
-        
-        # Exchange code for tokens
-        token_url = 'https://id.twitch.tv/oauth2/token'
-        data = {
-            'client_id': TWITCH_CLIENT_ID,
-            'client_secret': TWITCH_CLIENT_SECRET,
-            'code': code,
-            'grant_type': 'authorization_code',
-            'redirect_uri': 'https://weenstock.up.railway.app/auth/bot/callback'
-        }
-        
-        response = requests.post(token_url, data=data)
-        if response.status_code != 200:
-            flash('Failed to get access token', 'error')
-            return redirect(url_for('admin_panel'))
-        
-        token_data = response.json()
-        
-        # Store tokens in database
-        bot_config = BotConfig.query.first()
-        if not bot_config:
-            bot_config = BotConfig()
-        
-        bot_config.access_token = token_data['access_token']
-        bot_config.refresh_token = token_data['refresh_token']
-        bot_config.token_expires_at = datetime.utcnow() + timedelta(seconds=token_data['expires_in'])
-        bot_config.is_active = True
-        
-        db.session.add(bot_config)
-        db.session.commit()
-        
-        # Start the bot
-        start_bot(bot_config.access_token)
-        
-        flash('Bot authenticated successfully!', 'success')
-        return redirect(url_for('admin_panel'))
-        
-    except Exception as e:
-        flash(f'Error during bot authentication: {str(e)}', 'error')
-        return redirect(url_for('admin_panel'))
-
-# Add this template for bot authentication
-@app.route('/admin/bot/status')
-@admin_required
-def bot_status():
-    """Check bot status and refresh token if needed"""
-    try:
-        bot_config = BotConfig.query.first()
-        if not bot_config or not bot_config.is_active:
-            return jsonify({
-                'status': 'inactive',
-                'message': 'Bot is not configured'
-            })
-        
-        # Check if token needs refresh
-        if bot_config.token_expires_at <= datetime.utcnow():
-            # Refresh token
-            token_url = 'https://id.twitch.tv/oauth2/token'
-            data = {
-                'client_id': TWITCH_CLIENT_ID,
-                'client_secret': TWITCH_CLIENT_SECRET,
-                'grant_type': 'refresh_token',
-                'refresh_token': bot_config.refresh_token
-            }
+def update_stock_prices():
+    """Background task to update stock prices based on user interest"""
+    with app.app_context():
+        stocks = Stock.query.all()
+        for stock in stocks:
+            interest_score = stock.calculate_interest_score()
             
-            response = requests.post(token_url, data=data)
-            if response.status_code == 200:
-                token_data = response.json()
-                bot_config.access_token = token_data['access_token']
-                bot_config.refresh_token = token_data['refresh_token']
-                bot_config.token_expires_at = datetime.utcnow() + timedelta(seconds=token_data['expires_in'])
-                db.session.commit()
+            # Base volatility (0.5% to 2%)
+            base_volatility = random.uniform(0.005, 0.02)
+            
+            # Adjust volatility based on interest (can increase up to 3x)
+            volatility = base_volatility * (1 + min(2, interest_score / 10))
+            
+            # More frequent updates for high-interest stocks
+            if random.random() < (interest_score / 20):  # Probability increases with interest
+                # Calculate price change
+                change_percentage = random.uniform(-volatility, volatility)
+                old_price = stock.price
+                new_price = old_price * (1 + change_percentage)
                 
-                # Restart bot with new token
-                start_bot(bot_config.access_token)
-            else:
-                bot_config.is_active = False
-                db.session.commit()
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Failed to refresh token'
-                })
+                # Ensure price stays within reasonable bounds
+                min_price = stock.initial_price * 0.1  # Don't go below 10% of initial price
+                max_price = stock.initial_price * 10   # Don't go above 1000% of initial price
+                new_price = max(min_price, min(max_price, new_price))
+                
+                # Update stock price and record history
+                stock.previous_close = stock.price
+                stock.price = new_price
+                
+                # Record trade history
+                price_change = ((new_price - old_price) / old_price) * 100
+                history = StockHistory(
+                    stock_id=stock.id,
+                    price=new_price,
+                    price_change=price_change,
+                    volume=int(interest_score * 100)  # Volume based on interest
+                )
+                db.session.add(history)
         
-        return jsonify({
-            'status': 'active',
-            'expires_at': bot_config.token_expires_at.isoformat(),
-            'channel': bot_config.channel_name
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        })
+        db.session.commit()
+
+# Initialize the scheduler
+scheduler = BackgroundScheduler()
+scheduler.add_job(func=update_stock_prices, trigger="interval", seconds=30)
+scheduler.start()
 
 if __name__ == '__main__':
     app.run(debug=True) 
