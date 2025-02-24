@@ -579,9 +579,17 @@ def admin_panel():
             'formatted_value': f"${portfolio_value:,.2f}"
         })
     
-    return render_template('admin.html', 
+    # Get bot status
+    bot_config = BotConfig.query.first()
+    bot_status = {
+        'is_configured': bool(bot_config and bot_config.access_token),
+        'last_updated': bot_config.updated_at if bot_config else None
+    }
+    
+    return render_template('admin/dashboard.html', 
                          user_data=user_data,
                          stocks=stocks,
+                         bot_status=bot_status,
                          current_user=User.query.get(session['user_id']))
 
 @app.route('/admin/add_stock', methods=['POST'])
