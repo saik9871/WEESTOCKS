@@ -130,12 +130,14 @@ class Prediction(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     is_resolved = db.Column(db.Boolean, default=False)
     winning_option = db.Column(db.Integer, nullable=True)  # ID of the winning option
+    total_pool = db.Column(db.Float, nullable=False, default=0.0)  # Total amount bet on all options
 
 class PredictionOption(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     prediction_id = db.Column(db.Integer, db.ForeignKey('prediction.id'), nullable=False)
     text = db.Column(db.String(100), nullable=False)
     votes_count = db.Column(db.Integer, default=0)
+    total_bet_amount = db.Column(db.Float, nullable=False, default=0.0)  # Total amount bet on this option
 
 class Vote(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -159,6 +161,19 @@ class Comment(db.Model):
     # Relationships
     user = db.relationship('User', backref='comments')
     replies = db.relationship('Comment', backref=db.backref('parent', remote_side=[id]))
+
+class Bet(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    prediction_id = db.Column(db.Integer, db.ForeignKey('prediction.id'), nullable=False)
+    option_id = db.Column(db.Integer, db.ForeignKey('prediction_option.id'), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    is_settled = db.Column(db.Boolean, default=False)
+    winnings = db.Column(db.Float, nullable=True)  # Amount won (null if not settled or lost)
+
+    # Ensure users can only bet once per prediction
+    __table_args__ = (db.UniqueConstraint('user_id', 'prediction_id', name='unique_user_prediction_bet'),)
 
 def add_column(engine, table_name, column):
     column_name = column.compile(dialect=engine.dialect)
@@ -821,32 +836,45 @@ def make_first_user_admin():
 def predictions():
     if 'user_id' not in session:
         return redirect(url_for('login'))
-    
+
     user = User.query.get(session['user_id'])
     if not user:
-        session.clear()
         return redirect(url_for('login'))
 
     # Get active and past predictions
     active_predictions = Prediction.query.filter_by(is_active=True).order_by(Prediction.created_at.desc()).all()
     past_predictions = Prediction.query.filter_by(is_active=False).order_by(Prediction.created_at.desc()).limit(10).all()
-    
-    # Get user's votes
-    user_votes = Vote.query.filter_by(user_id=user.id).all()
-    user_votes_dict = {vote.prediction_id: vote.option_id for vote in user_votes}
-    
-    # Get options for each prediction
+
+    # Get all options for each prediction
     prediction_options = {}
-    for pred in active_predictions + past_predictions:
-        options = PredictionOption.query.filter_by(prediction_id=pred.id).all()
-        prediction_options[pred.id] = options
-    
+    for prediction in active_predictions + past_predictions:
+        prediction_options[prediction.id] = PredictionOption.query.filter_by(prediction_id=prediction.id).all()
+
+    # Get user's votes
+    user_votes = {}
+    votes = Vote.query.filter_by(user_id=user.id).all()
+    for vote in votes:
+        user_votes[vote.prediction_id] = vote.option_id
+
+    # Get user's bets
+    user_bets = {}
+    bets = Bet.query.filter_by(user_id=user.id).all()
+    for bet in bets:
+        user_bets[bet.prediction_id] = {
+            'option_id': bet.option_id,
+            'amount': bet.amount,
+            'is_settled': bet.is_settled,
+            'winnings': bet.winnings
+        }
+
     return render_template('predictions.html',
-                         user=user,
-                         active_predictions=active_predictions,
-                         past_predictions=past_predictions,
-                         prediction_options=prediction_options,
-                         user_votes=user_votes_dict)
+        user=user,
+        active_predictions=active_predictions,
+        past_predictions=past_predictions,
+        prediction_options=prediction_options,
+        user_votes=user_votes,
+        user_bets=user_bets
+    )
 
 @app.route('/admin/create_prediction', methods=['POST'])
 @admin_required
@@ -859,7 +887,7 @@ def create_prediction():
     # Validate required fields
     if not all(k in data for k in ['question', 'options', 'duration_hours']):
         return jsonify({'error': 'Missing required fields'}), 400
-    
+
     try:
         # Create prediction
         prediction = Prediction(
@@ -929,25 +957,147 @@ def vote():
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/place_bet', methods=['POST'])
+def place_bet():
+    if 'user_id' not in session:
+        return jsonify({'error': 'You must be logged in to place a bet'}), 401
+
+    data = request.get_json()
+    prediction_id = data.get('prediction_id')
+    option_id = data.get('option_id')
+    amount = float(data.get('amount', 0))
+
+    if not all([prediction_id, option_id, amount]):
+        return jsonify({'error': 'Missing required fields'}), 400
+
+    if amount <= 0:
+        return jsonify({'error': 'Bet amount must be greater than 0'}), 400
+
+    user = User.query.get(session['user_id'])
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    if user.cash < amount:
+        return jsonify({'error': 'Insufficient funds'}), 400
+
+    prediction = Prediction.query.get(prediction_id)
+    if not prediction:
+        return jsonify({'error': 'Prediction not found'}), 404
+
+    if not prediction.is_active or prediction.is_resolved:
+        return jsonify({'error': 'This prediction is no longer accepting bets'}), 400
+
+    if datetime.utcnow() >= prediction.ends_at:
+        return jsonify({'error': 'Betting period has ended'}), 400
+
+    option = PredictionOption.query.get(option_id)
+    if not option or option.prediction_id != prediction_id:
+        return jsonify({'error': 'Invalid option'}), 400
+
+    try:
+        # Check if user has already bet on this prediction
+        existing_bet = Bet.query.filter_by(
+            user_id=user.id,
+            prediction_id=prediction_id
+        ).first()
+
+        if existing_bet:
+            return jsonify({'error': 'You have already placed a bet on this prediction'}), 400
+
+        # Create new bet
+        bet = Bet(
+            user_id=user.id,
+            prediction_id=prediction_id,
+            option_id=option_id,
+            amount=amount
+        )
+
+        # Update user's cash balance
+        user.cash -= amount
+
+        # Update prediction and option totals
+        prediction.total_pool += amount
+        option.total_bet_amount += amount
+
+        db.session.add(bet)
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Bet placed successfully',
+            'new_balance': user.cash
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/admin/resolve_prediction', methods=['POST'])
 @admin_required
 def resolve_prediction():
     data = request.get_json()
-    if not all(k in data for k in ['prediction_id', 'winning_option_id']):
+    prediction_id = data.get('prediction_id')
+    winning_option_id = data.get('winning_option_id')
+
+    if not all([prediction_id, winning_option_id]):
         return jsonify({'error': 'Missing required fields'}), 400
-    
+
+    prediction = Prediction.query.get(prediction_id)
+    if not prediction:
+        return jsonify({'error': 'Prediction not found'}), 404
+
+    if prediction.is_resolved:
+        return jsonify({'error': 'Prediction is already resolved'}), 400
+
+    winning_option = PredictionOption.query.get(winning_option_id)
+    if not winning_option or winning_option.prediction_id != prediction_id:
+        return jsonify({'error': 'Invalid winning option'}), 400
+
     try:
-        prediction = Prediction.query.get(data['prediction_id'])
-        if not prediction:
-            return jsonify({'error': 'Prediction not found'}), 404
-        
-        prediction.is_active = False
+        # Calculate and distribute winnings
+        total_pool = prediction.total_pool
+        winning_pool = winning_option.total_bet_amount
+
+        if winning_pool > 0:
+            # Get all winning bets
+            winning_bets = Bet.query.filter_by(
+                prediction_id=prediction_id,
+                option_id=winning_option_id
+            ).all()
+
+            # Calculate the profit pool (90% of losing bets)
+            losing_pool = total_pool - winning_pool
+            profit_pool = losing_pool * 0.9  # 10% house fee
+
+            for bet in winning_bets:
+                # Calculate this bet's share of the profit pool
+                share = bet.amount / winning_pool
+                winnings = bet.amount + (profit_pool * share)
+                
+                # Update bet record
+                bet.is_settled = True
+                bet.winnings = winnings
+                
+                # Update user's cash balance
+                user = User.query.get(bet.user_id)
+                user.cash += winnings
+
+        # Mark all losing bets as settled
+        Bet.query.filter(
+            Bet.prediction_id == prediction_id,
+            Bet.option_id != winning_option_id
+        ).update({
+            'is_settled': True,
+            'winnings': 0
+        })
+
+        # Update prediction
         prediction.is_resolved = True
-        prediction.winning_option = data['winning_option_id']
+        prediction.is_active = False
+        prediction.winning_option = winning_option_id
+
         db.session.commit()
-        
-        return jsonify({'success': True, 'message': 'Prediction resolved successfully'})
-    
+        return jsonify({'message': 'Prediction resolved successfully'})
+
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500

@@ -245,6 +245,86 @@
             margin-top: 1rem;
         }
     }
+
+    .bet-stats {
+        font-size: 0.9rem;
+        color: var(--accent);
+        margin-top: 0.5rem;
+    }
+
+    .bet-form {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+        align-items: center;
+    }
+
+    .bet-amount {
+        width: 100px;
+        padding: 0.5rem;
+        background: var(--gray);
+        border: 1px solid var(--light-gray);
+        border-radius: 4px;
+        color: var(--text);
+    }
+
+    .bet-amount:focus {
+        outline: none;
+        border-color: var(--purple);
+    }
+
+    .bet-amount:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .place-bet-btn {
+        padding: 0.5rem 1rem;
+        background: var(--purple);
+        color: var(--text);
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: background-color 0.2s;
+    }
+
+    .place-bet-btn:hover:not(:disabled) {
+        background: var(--purple-dark);
+    }
+
+    .place-bet-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .winning-option {
+        color: #00cc00;
+        font-weight: 500;
+        margin-top: 0.5rem;
+    }
+
+    .user-bet-info {
+        margin-top: 0.5rem;
+        padding: 0.5rem;
+        background: var(--gray);
+        border-radius: 4px;
+        font-size: 0.9rem;
+    }
+
+    .user-bet-info.won {
+        border-left: 3px solid #00cc00;
+    }
+
+    .user-bet-info.lost {
+        border-left: 3px solid #ff4444;
+    }
+
+    .option-stats {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
 </style>
 {% endblock %}
 
@@ -321,12 +401,43 @@
                             data-action="vote"
                             data-prediction-id="{{ prediction.id }}"
                             data-option-id="{{ option.id }}"
-                            {% if prediction.id in user_votes %}disabled{% endif %}
+                            {% if prediction.id in user_bets %}disabled{% endif %}
                         >
                             <div class="option-progress" data-width="{{ percentage }}"></div>
                             <div class="option-content">
                                 <span class="option-text">{{ option.text }}</span>
-                                <span class="option-stats">{{ option.votes_count }} votes ({{ '%0.1f'|format(percentage) }}%)</span>
+                                <div class="option-stats">
+                                    <div>{{ option.votes_count }} votes ({{ '%0.1f'|format(percentage) }}%)</div>
+                                    <div class="bet-stats">
+                                        Total Pool: ${{ '%0.2f'|format(option.total_bet_amount) }}
+                                        {% if prediction.total_pool > 0 %}
+                                        ({{ '%0.1f'|format(option.total_bet_amount / prediction.total_pool * 100) }}% of total)
+                                        {% endif %}
+                                    </div>
+                                    {% if not prediction.is_resolved and prediction.is_active %}
+                                    <div class="bet-form">
+                                        <input type="number" 
+                                            class="bet-amount" 
+                                            placeholder="Bet amount" 
+                                            min="0.01" 
+                                            step="0.01"
+                                            {% if prediction.id in user_bets %}disabled{% endif %}
+                                        >
+                                        <button class="place-bet-btn"
+                                            data-prediction-id="{{ prediction.id }}"
+                                            data-option-id="{{ option.id }}"
+                                            {% if prediction.id in user_bets %}disabled{% endif %}
+                                        >
+                                            Place Bet
+                                        </button>
+                                    </div>
+                                    {% endif %}
+                                    {% if prediction.is_resolved and prediction.winning_option == option.id %}
+                                    <div class="winning-option">
+                                        🏆 Winning Option
+                                    </div>
+                                    {% endif %}
+                                </div>
                             </div>
                         </button>
                         {% endfor %}
@@ -565,6 +676,52 @@ document.addEventListener('DOMContentLoaded', function() {
 
     setInterval(updateCountdowns, 1000);
     updateCountdowns();
+
+    // Handle bet placement
+    document.addEventListener('click', function(e) {
+        const betBtn = e.target.closest('.place-bet-btn');
+        if (!betBtn) return;
+
+        const predictionId = betBtn.dataset.predictionId;
+        const optionId = betBtn.dataset.optionId;
+        const amountInput = betBtn.parentElement.querySelector('.bet-amount');
+        const amount = parseFloat(amountInput.value);
+
+        if (isNaN(amount) || amount <= 0) {
+            alert('Please enter a valid bet amount');
+            return;
+        }
+
+        fetch('/place_bet', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                prediction_id: predictionId,
+                option_id: optionId,
+                amount: amount
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert(data.error);
+            } else {
+                // Disable all bet inputs for this prediction
+                const predictionCard = betBtn.closest('.prediction-card');
+                predictionCard.querySelectorAll('.bet-amount, .place-bet-btn').forEach(el => {
+                    el.disabled = true;
+                });
+                alert('Bet placed successfully! New balance: $' + data.new_balance.toFixed(2));
+                // Reload to update the UI
+                window.location.reload();
+            }
+        })
+        .catch(error => {
+            alert('Error placing bet: ' + error);
+        });
+    });
 });
 </script>
 {% endblock %} 
