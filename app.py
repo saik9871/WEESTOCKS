@@ -8,6 +8,8 @@ import os
 from dotenv import load_dotenv
 import requests
 from urllib.parse import urlencode
+from requests_oauthlib import OAuth2Session
+import secrets
 
 # Load environment variables
 load_dotenv()
@@ -127,6 +129,16 @@ class Comment(db.Model):
     # Relationships
     user = db.relationship('User', backref='comments')
     replies = db.relationship('Comment', backref=db.backref('parent', remote_side=[id]))
+
+# Add this model for bot configuration
+class BotConfig(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    access_token = db.Column(db.String(255))
+    refresh_token = db.Column(db.String(255))
+    token_expires_at = db.Column(db.DateTime)
+    channel_name = db.Column(db.String(100), default='JasonTheWeen')
+    is_active = db.Column(db.Boolean, default=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 # Initialize database and add initial stocks only if they don't exist
 with app.app_context():
@@ -967,6 +979,146 @@ def add_comment(symbol):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+# Add these routes for bot authentication
+@app.route('/admin/bot/auth')
+@admin_required
+def bot_auth():
+    """Start the bot authentication process"""
+    try:
+        # Generate state token for security
+        state = secrets.token_hex(16)
+        session['oauth_state'] = state
+        
+        # Define OAuth parameters
+        params = {
+            'client_id': TWITCH_CLIENT_ID,
+            'redirect_uri': 'https://weenstock.up.railway.app/auth/bot/callback',
+            'response_type': 'code',
+            'scope': 'chat:read chat:edit',
+            'state': state,
+            'force_verify': 'true'
+        }
+        
+        # Construct auth URL
+        auth_url = f"https://id.twitch.tv/oauth2/authorize?{urlencode(params)}"
+        
+        return render_template('admin/bot_auth.html', auth_url=auth_url)
+        
+    except Exception as e:
+        flash(f'Error initiating bot authentication: {str(e)}', 'error')
+        return redirect(url_for('admin_panel'))
+
+@app.route('/auth/bot/callback')
+@admin_required
+def bot_callback():
+    """Handle the callback from Twitch OAuth"""
+    try:
+        # Verify state
+        state = request.args.get('state')
+        if state != session.get('oauth_state'):
+            flash('Invalid state parameter', 'error')
+            return redirect(url_for('admin_panel'))
+        
+        # Get authorization code
+        code = request.args.get('code')
+        if not code:
+            flash('No authorization code received', 'error')
+            return redirect(url_for('admin_panel'))
+        
+        # Exchange code for tokens
+        token_url = 'https://id.twitch.tv/oauth2/token'
+        data = {
+            'client_id': TWITCH_CLIENT_ID,
+            'client_secret': TWITCH_CLIENT_SECRET,
+            'code': code,
+            'grant_type': 'authorization_code',
+            'redirect_uri': 'https://weenstock.up.railway.app/auth/bot/callback'
+        }
+        
+        response = requests.post(token_url, data=data)
+        if response.status_code != 200:
+            flash('Failed to get access token', 'error')
+            return redirect(url_for('admin_panel'))
+        
+        token_data = response.json()
+        
+        # Store tokens in database
+        bot_config = BotConfig.query.first()
+        if not bot_config:
+            bot_config = BotConfig()
+        
+        bot_config.access_token = token_data['access_token']
+        bot_config.refresh_token = token_data['refresh_token']
+        bot_config.token_expires_at = datetime.utcnow() + timedelta(seconds=token_data['expires_in'])
+        bot_config.is_active = True
+        
+        db.session.add(bot_config)
+        db.session.commit()
+        
+        # Start the bot
+        start_bot(bot_config.access_token)
+        
+        flash('Bot authenticated successfully!', 'success')
+        return redirect(url_for('admin_panel'))
+        
+    except Exception as e:
+        flash(f'Error during bot authentication: {str(e)}', 'error')
+        return redirect(url_for('admin_panel'))
+
+# Add this template for bot authentication
+@app.route('/admin/bot/status')
+@admin_required
+def bot_status():
+    """Check bot status and refresh token if needed"""
+    try:
+        bot_config = BotConfig.query.first()
+        if not bot_config or not bot_config.is_active:
+            return jsonify({
+                'status': 'inactive',
+                'message': 'Bot is not configured'
+            })
+        
+        # Check if token needs refresh
+        if bot_config.token_expires_at <= datetime.utcnow():
+            # Refresh token
+            token_url = 'https://id.twitch.tv/oauth2/token'
+            data = {
+                'client_id': TWITCH_CLIENT_ID,
+                'client_secret': TWITCH_CLIENT_SECRET,
+                'grant_type': 'refresh_token',
+                'refresh_token': bot_config.refresh_token
+            }
+            
+            response = requests.post(token_url, data=data)
+            if response.status_code == 200:
+                token_data = response.json()
+                bot_config.access_token = token_data['access_token']
+                bot_config.refresh_token = token_data['refresh_token']
+                bot_config.token_expires_at = datetime.utcnow() + timedelta(seconds=token_data['expires_in'])
+                db.session.commit()
+                
+                # Restart bot with new token
+                start_bot(bot_config.access_token)
+            else:
+                bot_config.is_active = False
+                db.session.commit()
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Failed to refresh token'
+                })
+        
+        return jsonify({
+            'status': 'active',
+            'expires_at': bot_config.token_expires_at.isoformat(),
+            'channel': bot_config.channel_name
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        })
 
 if __name__ == '__main__':
     app.run(debug=True) 

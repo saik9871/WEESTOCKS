@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-md mx-auto bg-gray-900 rounded-lg shadow-lg p-6">
+        <h1 class="text-2xl font-bold mb-6">Configure Chat Bot</h1>
+        
+        <div class="text-gray-300 mb-6">
+            <p class="mb-4">Click the button below to authenticate the WeenStocks bot with Twitch. This will allow the bot to:</p>
+            <ul class="list-disc list-inside space-y-2 mb-4">
+                <li>Read chat messages</li>
+                <li>Send chat messages</li>
+                <li>Moderate chat (if needed)</li>
+            </ul>
+            <p>The bot will only operate in the specified channel.</p>
+        </div>
+        
+        <a href="{{ auth_url }}" 
+           class="block w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded text-center transition duration-200">
+            Authenticate with Twitch
+        </a>
+        
+        <p class="text-sm text-gray-400 mt-4">
+            Note: You should log in with your bot account, not your personal Twitch account.
+        </p>
+    </div>
+</div>
+{% endblock %} 
